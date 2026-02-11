@@ -30,9 +30,9 @@
 <div id="games-container">🔄 A carregar jogos…</div>
 
 <script>
-const API_KEY = "2c8df4497d62d27698ab234d3d76a2d76ced3e1e841b603b3ada01918c067519";
+const API_KEY = "a8d44cabdbmsh94b938267b0e53p158c92jsn7bb96690b99";
 let currentTab = "football";
-let allGames = []; // Guarda todos os jogos carregados
+let allGames = []; // guarda todos os jogos carregados
 
 function switchTab(tab, event) {
   currentTab = tab;
@@ -43,7 +43,7 @@ function switchTab(tab, event) {
 }
 
 function renderGames(games) {
-  allGames = games; // guarda para o filtro
+  allGames = games;
   const container = document.getElementById("games-container");
   container.innerHTML = "";
 
@@ -63,7 +63,7 @@ function renderGames(games) {
     div.dataset.home = home.toLowerCase();
     div.dataset.away = away.toLowerCase();
     div.innerHTML = `
-      <strong>${home} vs ${away}</strong><br>
+      <strong>${home} vs ${away}</strong> 🔴 AO VIVO<br>
       🕒 ${date} ${time}<br><br>
       Odd: <input type="number" step="0.01" id="odd-${game.event_key || game.match_id}" placeholder="1.5">
       <button onclick="checkOdd('${game.event_key || game.match_id}')">Ver se compensa +1 golo/ponto</button>
@@ -93,14 +93,20 @@ async function loadGames() {
   const container = document.getElementById("games-container");
   container.innerHTML = "🔄 A carregar jogos…";
 
+  // Define endpoint para Futebol ou Basket ao vivo
   const sport = currentTab === "football" ? "Football" : "Basketball";
-  const url = `https://apiv2.allsportsapi.com/${sport}/?met=Livescore&APIkey=${API_KEY}`;
+  const url = `https://allsportsapi.p.rapidapi.com/${sport}/?met=Livescore`;
 
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, {
+      method: "GET",
+      headers: {
+        "X-RapidAPI-Key": API_KEY,
+        "X-RapidAPI-Host": "allsportsapi.p.rapidapi.com"
+      }
+    });
     const data = await res.json();
-
-    let gamesList = data.result || data.result1 || data.result2 || [];
+    let gamesList = data.result || [];
     renderGames(gamesList);
   } catch(err) {
     console.error(err);
@@ -108,10 +114,10 @@ async function loadGames() {
   }
 }
 
-// Atualiza automaticamente a cada 30 segundos
+// Atualiza a cada 30 segundos
 setInterval(loadGames, 30000);
 
-// Carrega na inicialização
+// Carrega ao iniciar
 loadGames();
 </script>
 
