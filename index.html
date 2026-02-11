@@ -2,204 +2,117 @@
 <html lang="pt">
 <head>
 <meta charset="UTF-8">
-<title>⚽ Jogos com Separadores</title>
+<title>⚽🏀 Jogos Ao Vivo Interativos</title>
 <style>
-  body {
-    font-family: Arial, sans-serif;
-    background: #f4f4f4;
-    padding: 20px;
-  }
-  h1 { text-align: center; margin-bottom: 20px; }
-
-  /* Separadores */
-  .tabs {
-    display: flex;
-    justify-content: center;
-    margin-bottom: 20px;
-    gap: 10px;
-  }
-  .tab {
-    padding: 10px 20px;
-    cursor: pointer;
-    background: #ddd;
-    border-radius: 5px 5px 0 0;
-    font-weight: bold;
-  }
-  .tab.active { background: #28a745; color: white; }
-
-  /* Conteúdos */
-  .tab-content {
-    display: none;
-  }
-  .tab-content.active { display: block; }
-
-  .game {
-    background: #fff;
-    padding: 12px;
-    margin-bottom: 10px;
-    border-radius: 8px;
-    box-shadow: 0px 2px 5px rgba(0,0,0,0.15);
-  }
-  .controls input, .controls select {
-    padding: 6px;
-    margin-right: 6px;
-    border-radius: 4px;
-    border: 1px solid #ccc;
-  }
-  .controls button {
-    padding: 6px 12px;
-    background: #28a745;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-  }
-  .controls button:hover { background: #218838; }
-  .result { margin-top: 8px; font-weight: bold; }
+  body { font-family: Arial; background: #f4f4f4; padding: 20px; }
+  h1 { text-align: center; }
+  .tabs { margin-bottom: 10px; }
+  .tab { cursor: pointer; display: inline-block; padding: 10px 15px; margin-right: 5px; border-radius: 6px; background: #ddd; }
+  .tab.active { background: #4CAF50; color: white; }
+  #games-container { background: #fff; border-radius: 6px; padding: 15px; min-height: 150px; }
+  .game { border-bottom: 1px solid #eee; padding: 10px 0; }
+  .game input { width: 70px; margin-right: 5px; }
+  #search { width: 100%; padding: 8px; margin-bottom: 10px; border-radius: 6px; border: 1px solid #ccc; }
+  button { cursor: pointer; }
 </style>
 </head>
 <body>
 
-<h1>⚽ Jogos de Futebol</h1>
+<h1>⚽🏀 Jogos Ao Vivo Interativos</h1>
 
 <div class="tabs">
-  <div class="tab active" data-tab="live">🔴 Ao Vivo</div>
-  <div class="tab" data-tab="today">📅 Hoje</div>
-  <div class="tab" data-tab="upcoming">📆 Próximos Dias</div>
+  <span class="tab active" onclick="switchTab('football', event)">Futebol</span>
+  <span class="tab" onclick="switchTab('basket', event)">Basket</span>
 </div>
 
-<div id="live" class="tab-content active">
-  <div id="live-games">🔄 Carregando jogos ao vivo...</div>
-</div>
+<input type="text" id="search" placeholder="🔍 Filtrar por equipe..." oninput="filterGames()">
 
-<div id="today" class="tab-content">
-  <div id="today-games">🔄 Carregando jogos de hoje...</div>
-</div>
-
-<div id="upcoming" class="tab-content">
-  <div id="upcoming-games">🔄 Carregando próximos dias...</div>
-</div>
+<div id="games-container">🔄 A carregar jogos…</div>
 
 <script>
-const API_TOKEN = "dpobMmoPahBz9cdt3I4WVTZlqCwty9jEeEoT1UGRM2WRMab9fs912dBi89aM";
+const API_KEY = "2c8df4497d62d27698ab234d3d76a2d76ced3e1e841b603b3ada01918c067519";
+let currentTab = "football";
+let allGames = []; // Guarda todos os jogos carregados
 
-// ====== FUNÇÃO DE SEPARADORES ======
-const tabs = document.querySelectorAll(".tab");
-tabs.forEach(tab => {
-  tab.addEventListener("click", () => {
-    tabs.forEach(t => t.classList.remove("active"));
-    tab.classList.add("active");
+function switchTab(tab, event) {
+  currentTab = tab;
+  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+  event.target.classList.add("active");
+  document.getElementById("search").value = "";
+  loadGames();
+}
 
-    document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
-    document.getElementById(tab.dataset.tab).classList.add("active");
-  });
-});
+function renderGames(games) {
+  allGames = games; // guarda para o filtro
+  const container = document.getElementById("games-container");
+  container.innerHTML = "";
 
-// ====== FUNÇÃO DE ANÁLISE DE ODDS ======
-function analyzeOdd(key) {
-  const oddInput = document.getElementById(`odd-${key}`) || document.getElementById(`odd-live-${key}`);
-  const marketSelect = document.getElementById(`market-${key}`) || document.getElementById(`market-live-${key}`);
-  const resultDiv = document.getElementById(`result-${key}`) || document.getElementById(`result-live-${key}`);
-
-  const odd = parseFloat(oddInput.value);
-  const market = marketSelect.value;
-
-  if (!odd || odd <= 1) {
-    resultDiv.innerHTML = `<span style="color:#c00;">⚠️ Introduz uma odd válida (ex: 1.50)</span>`;
+  if (!games || games.length === 0) {
+    container.innerHTML = "📍 Não há jogos ao vivo para mostrar.";
     return;
   }
 
-  const implied = ((1 / odd) * 100).toFixed(2);
-  let message = `📊 Probabilidade implícita: <strong>${implied}%</strong><br>`;
-  message += `Mercado: <strong>${market}</strong><br>`;
-  if (implied >= 50) message += `<span style="color:green;">🟢 Pode compensar</span>`;
-  else message += `<span style="color:red;">🔴 Não compensa</span>`;
-  resultDiv.innerHTML = message;
+  games.forEach(game => {
+    const home = game.event_home_team || game.match_hometeam_name || "Equipe A";
+    const away = game.event_away_team || game.match_awayteam_name || "Equipe B";
+    const date = game.event_date || game.match_date || "";
+    const time = game.event_time || game.match_time || "";
+
+    const div = document.createElement("div");
+    div.className = "game";
+    div.dataset.home = home.toLowerCase();
+    div.dataset.away = away.toLowerCase();
+    div.innerHTML = `
+      <strong>${home} vs ${away}</strong><br>
+      🕒 ${date} ${time}<br><br>
+      Odd: <input type="number" step="0.01" id="odd-${game.event_key || game.match_id}" placeholder="1.5">
+      <button onclick="checkOdd('${game.event_key || game.match_id}')">Ver se compensa +1 golo/ponto</button>
+    `;
+    container.appendChild(div);
+  });
 }
 
-// ====== FUNÇÃO PARA CARREGAR JOGOS ======
-async function loadGames(url, containerId, prefix="") {
-  const container = document.getElementById(containerId);
-  container.innerHTML = "🔄 A carregar...";
+function checkOdd(id) {
+  const oddInput = document.getElementById(`odd-${id}`);
+  const odd = parseFloat(oddInput.value);
+  if (!odd || odd <= 0) return alert("Insere uma odd válida!");
+  alert(`Odd ${odd} para +1 golo/ponto. Potencial retorno: ${(odd * 1).toFixed(2)}`);
+}
+
+function filterGames() {
+  const query = document.getElementById("search").value.toLowerCase();
+  const filtered = allGames.filter(game => {
+    const home = (game.event_home_team || game.match_hometeam_name || "").toLowerCase();
+    const away = (game.event_away_team || game.match_awayteam_name || "").toLowerCase();
+    return home.includes(query) || away.includes(query);
+  });
+  renderGames(filtered);
+}
+
+async function loadGames() {
+  const container = document.getElementById("games-container");
+  container.innerHTML = "🔄 A carregar jogos…";
+
+  const sport = currentTab === "football" ? "Football" : "Basketball";
+  const url = `https://apiv2.allsportsapi.com/${sport}/?met=Livescore&APIkey=${API_KEY}`;
+
   try {
     const res = await fetch(url);
-    const json = await res.json();
-    const games = json.data || [];
+    const data = await res.json();
 
-    if (games.length === 0) {
-      container.innerHTML = "📍 Não há jogos.";
-      return;
-    }
-
-    container.innerHTML = "";
-    games.forEach(game => {
-      const div = document.createElement("div");
-      div.className = "game";
-      div.innerHTML = `
-        <strong>${game.name}</strong><br>
-        🕒 ${new Date(game.starting_at).toLocaleString()}<br>
-        <div class="controls">
-          Odd: <input type="number" step="0.01" id="odd-${prefix}${game.id}" placeholder="Ex: 1.50">
-          Mercado:
-          <select id="market-${prefix}${game.id}">
-            <option value="+1">+1 golo</option>
-            <option value="-1">-1 golo</option>
-            <option value="over2.5">Over 2.5</option>
-            <option value="btts">BTTS</option>
-          </select>
-          <button onclick="analyzeOdd('${prefix}${game.id}')">Analisar</button>
-        </div>
-        <div id="result-${prefix}${game.id}" class="result"></div>
-      `;
-      container.appendChild(div);
-    });
+    let gamesList = data.result || data.result1 || data.result2 || [];
+    renderGames(gamesList);
   } catch(err) {
-    container.innerHTML = "⚠️ Erro ao carregar os jogos.";
     console.error(err);
+    container.innerHTML = "📍 Não há jogos ao vivo para mostrar.";
   }
 }
 
-// ====== CARREGAR AO VIVO ======
-async function loadLive() {
-  await loadGames(
-    `https://api.sportmonks.com/v3/football/livescores/inplay?api_token=${API_TOKEN}`,
-    "live-games",
-    "live-"
-  );
-}
+// Atualiza automaticamente a cada 30 segundos
+setInterval(loadGames, 30000);
 
-// ====== CARREGAR HOJE ======
-async function loadToday() {
-  const date = new Date().toISOString().split("T")[0];
-  await loadGames(
-    `https://api.sportmonks.com/v3/football/fixtures/date/${date}?api_token=${API_TOKEN}`,
-    "today-games"
-  );
-}
-
-// ====== CARREGAR PRÓXIMOS DIAS (3 dias) ======
-async function loadUpcoming() {
-  const container = document.getElementById("upcoming-games");
-  container.innerHTML = "🔄 A carregar próximos dias...";
-  const today = new Date();
-  container.innerHTML = "";
-  for(let i=1; i<=3; i++){
-    const nextDay = new Date(today);
-    nextDay.setDate(today.getDate() + i);
-    const dateStr = nextDay.toISOString().split("T")[0];
-    await loadGames(
-      `https://api.sportmonks.com/v3/football/fixtures/date/${dateStr}?api_token=${API_TOKEN}`,
-      "upcoming-games",
-      `upcoming-${dateStr}-`
-    );
-  }
-}
-
-// ====== INICIALIZAR ======
-loadLive();
-loadToday();
-loadUpcoming();
-setInterval(loadLive, 15000); // atualizar ao vivo a cada 15s
+// Carrega na inicialização
+loadGames();
 </script>
 
 </body>
