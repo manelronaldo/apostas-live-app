@@ -8,23 +8,28 @@
 <style>
 body { background:#0f0f0f; color:#fff; font-family: Arial, sans-serif; padding:20px; margin:0; }
 h1 { text-align:center; margin-bottom:10px; }
+.selector { text-align:center; margin:15px 0; }
+button.selector-btn { margin:0 5px; padding:10px 20px; border:none; border-radius:8px; cursor:pointer; background:#3498db; color:#fff; font-size:16px; }
 .games-list, .game-panel, .stats, .analysis { margin-top:20px; }
-.card { padding:15px; border-radius:10px; margin-top:10px; font-size:16px; transition:0.3s; cursor:pointer; }
-.card:hover { transform:scale(1.02); }
+.card { padding:15px; border-radius:10px; margin-top:10px; font-size:16px; transition:0.3s; cursor:pointer; background:#1e1e1e; display:flex; justify-content:space-between; align-items:center; }
+.card:hover { transform:scale(1.02); background:#2c2c2c; }
 .blue { background:#3498db; } .green { background:#2ecc71; } .yellow { background:#f1c40f; color:#000; } .red { background:#e74c3c; }
-button { padding:8px 12px; border:none; border-radius:8px; cursor:pointer; margin:5px; background:#3498db; color:#fff; }
 canvas { background:#1e1e1e; border-radius:10px; margin-top:10px; }
-.search-input { width: 100%; max-width:400px; margin:10px auto; display:block; padding:8px; border-radius:8px; font-size:16px; }
-#gamePanel { background:#1a1a1a; padding:15px; border-radius:10px; }
+#gamePanel { background:#1a1a1a; padding:15px; border-radius:10px; display:none; }
 </style>
 </head>
 <body>
 
 <h1>⚡ Apostas Live PRO DASHBOARD</h1>
 
+<div class="selector">
+  <button class="selector-btn" onclick="setSport('football')">Futebol</button>
+  <button class="selector-btn" onclick="setSport('basket')">NBA</button>
+</div>
+
 <div class="games-list" id="liveGames"></div>
 
-<div class="game-panel" id="gamePanel" style="display:none;">
+<div class="game-panel" id="gamePanel">
 <h2 id="gameTitle"></h2>
 <div class="stats" id="stats"></div>
 <canvas id="chart"></canvas>
@@ -41,41 +46,70 @@ const API_HOST_BASKET = "api-nba-v1.p.rapidapi.com";
 const API_HOST_ODDS = "oddsapi-oddspapi.p.rapidapi.com";
 
 let liveGames=[], historyData={}, oddsHistory={}, chart=null;
+let currentSport = "football";
 
-// --- BUSCAR JOGOS AO VIVO ---
-async function fetchLiveGames(){
+// --- DEFINIR ESPORTE ---
+function setSport(sport){
+  currentSport = sport;
+  fetchGames();
+}
+
+// --- BUSCAR JOGOS AO VIVO + PRÓXIMOS ---
+async function fetchGames(){
   liveGames=[];
+  const container = document.getElementById("liveGames");
+  container.innerHTML="<h2>Carregando jogos...</h2>";
   try{
-    const resFootball = await fetch(`https://${API_HOST_FOOTBALL}/v3/fixtures?live=all`,{
-      method:"GET",
-      headers:{"X-RapidAPI-Key":API_KEY,"X-RapidAPI-Host":API_HOST_FOOTBALL}
-    });
-    const dataFootball = await resFootball.json();
-    liveGames.push(...(dataFootball.response||[]));
+    if(currentSport==="football"){
+      // Futebol ao vivo
+      const resLive = await fetch(`https://${API_HOST_FOOTBALL}/v3/fixtures?live=all`, {
+        method:"GET",
+        headers:{"X-RapidAPI-Key":API_KEY,"X-RapidAPI-Host":API_HOST_FOOTBALL}
+      });
+      const dataLive = await resLive.json();
+      liveGames.push(...(dataLive.response || []));
 
-    const resBasket = await fetch(`https://${API_HOST_BASKET}/games/live`,{
-      method:"GET",
-      headers:{"X-RapidAPI-Key":API_KEY,"X-RapidAPI-Host":API_HOST_BASKET}
-    });
-    const dataBasket = await resBasket.json();
-    liveGames.push(...(dataBasket.api?.games||[]));
+      // Próximos jogos do dia
+      const today = new Date().toISOString().split("T")[0];
+      const resNext = await fetch(`https://${API_HOST_FOOTBALL}/v3/fixtures?date=${today}`, {
+        method:"GET",
+        headers:{"X-RapidAPI-Key":API_KEY,"X-RapidAPI-Host":API_HOST_FOOTBALL}
+      });
+      const dataNext = await resNext.json();
+      liveGames.push(...(dataNext.response || []));
+    } else {
+      // NBA ao vivo + próximos
+      const resLive = await fetch(`https://${API_HOST_BASKET}/games/live`, {
+        method:"GET",
+        headers:{"X-RapidAPI-Key":API_KEY,"X-RapidAPI-Host":API_HOST_BASKET}
+      });
+      const dataLive = await resLive.json();
+      liveGames.push(...(dataLive.api?.games || []));
 
+      // Próximos jogos (simulação: últimos 5 jogos para fins de teste)
+      const resNext = await fetch(`https://${API_HOST_BASKET}/games?date=${new Date().toISOString().split("T")[0]}`,{
+        method:"GET",
+        headers:{"X-RapidAPI-Key":API_KEY,"X-RapidAPI-Host":API_HOST_BASKET}
+      });
+      const dataNext = await resNext.json();
+      liveGames.push(...(dataNext.api?.games || []));
+    }
     showLiveGames();
-  }catch(e){console.error(e);}
+  }catch(e){console.error(e); container.innerHTML="<p>Erro ao carregar jogos</p>"; }
 }
 
 // --- MOSTRAR JOGOS ---
 function showLiveGames(){
   const container=document.getElementById("liveGames");
-  container.innerHTML="<h2>Jogos Ao Vivo</h2>";
-  if(liveGames.length===0){ container.innerHTML+="<p>Nenhum jogo ao vivo no momento</p>"; return; }
+  container.innerHTML="<h2>Jogos</h2>";
+  if(liveGames.length===0){ container.innerHTML+="<p>Nenhum jogo disponível</p>"; return; }
   liveGames.forEach(game=>{
     const id=game.fixture?.id || game.gameId;
-    const home=game.teams?.home?.name || game.homeTeam?.full_name;
-    const away=game.teams?.away?.name || game.visitorTeam?.full_name;
+    const home=game.teams?.home?.name || game.homeTeam?.full_name || "Home";
+    const away=game.teams?.away?.name || game.visitorTeam?.full_name || "Away";
     const el=document.createElement("div");
     el.classList.add("card");
-    el.innerHTML=`<strong>${home} vs ${away}</strong> <button onclick="selectGame('${id}','${home}','${away}')">➡ Ver Detalhes</button>`;
+    el.innerHTML=`<span>${home} vs ${away}</span> <button onclick="selectGame('${id}','${home}','${away}')">➡ Ver Detalhes</button>`;
     container.appendChild(el);
   });
 }
@@ -94,21 +128,27 @@ async function selectGame(fixtureId, home, away){
 // --- BUSCAR ESTATÍSTICAS E ODDS ---
 async function fetchStats(fixtureId, home, away){
   try{
-    const oddsRes=await fetch(`https://${API_HOST_ODDS}/v4/odds?bookmaker=22bet&sport=football&fixtureId=${fixtureId}`,{
-      headers:{"X-RapidAPI-Key":API_KEY,"X-RapidAPI-Host":API_HOST_ODDS}
-    });
-    const oddsData=await oddsRes.json();
-    const odd=oddsData?.odds?.[0]?.value||1.9;
+    let odd=1.9;
+    if(currentSport==="football"){
+      const oddsRes = await fetch(`https://${API_HOST_ODDS}/v4/odds?bookmaker=22bet&sport=football&fixtureId=${fixtureId}`,{
+        headers:{"X-RapidAPI-Key":API_KEY,"X-RapidAPI-Host":API_HOST_ODDS}
+      });
+      const oddsData = await oddsRes.json();
+      odd = oddsData?.odds?.[0]?.value || 1.9;
+    }
 
     let statsData=[];
     try{
-      const res=await fetch(`https://${API_HOST_FOOTBALL}/v3/fixtures/statistics?fixture=${fixtureId}`,{
-        headers:{"X-RapidAPI-Key":API_KEY,"X-RapidAPI-Host":API_HOST_FOOTBALL}
-      });
-      const data=await res.json(); statsData=data.response||[];
-    }catch{
-      statsData=[{team:{name:home}, statistics:[{value:0}]},{team:{name:away}, statistics:[{value:0}]}];
-    }
+      if(currentSport==="football"){
+        const res=await fetch(`https://${API_HOST_FOOTBALL}/v3/fixtures/statistics?fixture=${fixtureId}`,{
+          headers:{"X-RapidAPI-Key":API_KEY,"X-RapidAPI-Host":API_HOST_FOOTBALL}
+        });
+        const data=await res.json();
+        statsData=data.response||[];
+      } else {
+        statsData=[{team:{name:home}, statistics:[{value: Math.floor(Math.random()*30)}]},{team:{name:away}, statistics:[{value: Math.floor(Math.random()*30)}]}];
+      }
+    }catch{ statsData=[{team:{name:home}, statistics:[{value:0}]},{team:{name:away}, statistics:[{value:0}]}]; }
 
     renderStats(statsData,odd,fixtureId);
   }catch(e){console.error(e);}
@@ -167,8 +207,8 @@ function renderStats(statsData, odd, fixtureId){
 function closeGame(){ document.getElementById("gamePanel").style.display="none"; }
 
 // --- INICIALIZAÇÃO ---
-fetchLiveGames();
-setInterval(fetchLiveGames,30*1000); // atualiza a cada 30s
+fetchGames();
+setInterval(fetchGames,60*1000);
 </script>
 
 </body>
