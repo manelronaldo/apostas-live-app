@@ -3,143 +3,123 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Dashboard Apostas Inteligente</title>
+<title>📊 Apostas Manual + Jogos SportMonks</title>
 <style>
-body { background: #0f0f0f; color: #fff; font-family: Arial, sans-serif; margin: 0; padding: 20px; }
-header { text-align:center; margin-bottom: 20px; }
-button { margin: 0 5px; padding: 8px 14px; border-radius:6px; border:none; font-size:16px; cursor:pointer; background:#3498db; color:#fff;}
-.card { background:#1f1f1f; padding:12px; margin-top:8px; border-radius:8px;}
-h2{margin:0;}
+body{background:#0f0f0f;color:#fff;font-family:Arial,sans-serif;margin:0;padding:20px;}
+h1{text-align:center;margin-bottom:15px;}
+button{padding:8px 14px;border:none;border-radius:6px;background:#3498db;color:#fff;font-size:16px;cursor:pointer;margin:0 5px;}
+.card{background:#1f1f1f;padding:12px;margin-top:8px;border-radius:8px;}
+input,select{padding:8px;border-radius:6px;border:none;margin-top:8px;width:calc(100%-16px);}
+label{font-size:14px;display:block;margin-top:8px;}
+#detailPanel{display:none;}
+.feedback{margin-top:10px;font-size:18px;font-weight:bold;}
+.blue{color:#3498db;} .green{color:#2ecc71;} .yellow{color:#f1c40f;} .red{color:#e74c3c;}
 </style>
 </head>
 <body>
 
-<header>
-  <h1>⚽ Apostas Inteligente com SportMonks</h1>
-  <button onclick="fetchFixtures('football')">Futebol</button>
-</header>
-
+<h1>📅 Jogos de Futebol – Insere Odds Manualmente</h1>
 <div id="games"></div>
 
-<div id="detailPanel" style="display:none; margin-top:20px;">
+<div id="detailPanel">
   <button onclick="closeDetail()">🔙 Voltar</button>
   <div id="detail"></div>
 </div>
 
 <script>
-const API_TOKEN = "dpobMmoPahBz9cdt3I4WVTZlqCwty9jEeEoT1UGRM2WRMab9fs912dBi89aM"; // <<< teu token aqui
+// ➤ Teu token API SportMonks
+const API_TOKEN = "dpobMmoPahBz9cdt3I4WVTZlqCwty9jEeEoT1UGRM2WRMab9fs912dBi89aM";
 
-// Formatação da data atual
-function getToday() {
+// Formatar data atual YYYY-MM-DD para fixtures
+function getToday(){
   const d = new Date();
   return d.toISOString().split('T')[0];
 }
 
-async function fetchFixtures(sport) {
+// Buscar os jogos (fixtures) do dia
+async function fetchFixtures(){
   const date = getToday();
   document.getElementById("detailPanel").style.display = "none";
-  document.getElementById("games").innerHTML = `<p>Carregando jogos para ${date}...</p>`;
-  try {
-    const url = `https://api.sportmonks.com/v3/football/fixtures/date/${date}?api_token=${API_TOKEN}&include=participants;odds;predictions`;
-    const resp = await fetch(url);
-    const data = await resp.json();
-    showGames(data.data || []);
-  } catch(e) {
-    document.getElementById("games").innerHTML = `<p>Erro a carregar jogos</p>`;
+  document.getElementById("games").innerHTML = "<p>Carregando jogos...</p>";
+  try{
+    const url = `https://api.sportmonks.com/v3/football/fixtures/date/${date}?api_token=${API_TOKEN}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    const fixtures = data.data || [];
+    showGames(fixtures);
+  }catch(e){
+    document.getElementById("games").innerHTML = "<p>Erro ao carregar jogos</p>";
     console.error(e);
   }
 }
 
-function showGames(fixtures) {
+// Mostrar a lista de jogos mesmo sem odds
+function showGames(fixtures){
   const container = document.getElementById("games");
   container.innerHTML = "";
-  if (!fixtures || fixtures.length === 0) {
+  if(!fixtures || fixtures.length === 0){
     container.innerHTML = "<p>Sem jogos hoje.</p>";
     return;
   }
   fixtures.forEach(game => {
-    const home = game.participants[0]?.name || "-";
-    const away = game.participants[1]?.name || "-";
     const card = document.createElement("div");
     card.className = "card";
     card.innerHTML = `
-      <h2>${home} vs ${away}</h2>
-      <p>Começa: ${game.starting_at}</p>
-      <button onclick="showDetail(${game.id})">Ver Detalhes</button>
+      <strong>${game.name}</strong><br>
+      🕒 ${game.starting_at}
+      <button onclick="showDetail(${game.id}, '${game.name}')">Inserir Odds</button>
     `;
     container.appendChild(card);
   });
 }
 
-// Mostrar detalhes com odds e prob.
-async function showDetail(fixtureId) {
+// Mostrar painel de detalhe com formulário de odd manual
+function showDetail(id, name){
   document.getElementById("games").innerHTML = "";
   document.getElementById("detailPanel").style.display = "block";
-  document.getElementById("detail").innerHTML = `<p>Carregando detalhes...</p>`;
-
-  try {
-    const url = `https://api.sportmonks.com/v3/football/fixtures/${fixtureId}?api_token=${API_TOKEN}&include=participants;odds;predictions`;
-    const resp = await fetch(url);
-    const result = await resp.json();
-    const game = result.data;
-    renderDetail(game);
-  } catch(e) {
-    document.getElementById("detail").innerHTML = `<p>Erro ao carregar detalhes</p>`;
-    console.error(e);
-  }
-}
-
-function renderDetail(game) {
-  const home = game.participants[0]?.name;
-  const away = game.participants[1]?.name;
-
-  // odds do mercado principal 3‑way (se existirem)
-  const oddsList = game.odds?.filter(o => o.market_id == 1) || [];
-
-  let oddsHtml = "<h3>Odds (Full Time)</h3>";
-  oddsList.forEach(o => {
-    oddsHtml += `<p>${o.label}: ${o.value}</p>`;
-  });
-
-  // Probabilidades preditivas
-  let predHtml = "<h3>Probabilidades</h3>";
-  if (game.predictions && game.predictions.length > 0) {
-    game.predictions.forEach(p => {
-      if (p.type?.developer_name === "FULLTIME_RESULT_PROBABILITY") {
-        predHtml += `<p>${p.type.name}: Home ${p.predictions.home}% / Draw ${p.predictions.draw}% / Away ${p.predictions.away}%</p>`;
-      }
-    });
-  } else {
-    predHtml += "<p>Sem dados de probabilidade.</p>";
-  }
-
-  // Comparar odd e probabilidade
-  let analysis = "<h3>Análise</h3>";
-  const fullprob = game.predictions?.find(p => p.type?.developer_name === "FULLTIME_RESULT_PROBABILITY");
-  if (fullprob && oddsList.length >= 1) {
-    const homeProb = fullprob.predictions.home/100;
-    const homeOdd = parseFloat(oddsList.find(o => o.label==="Home")?.value);
-    const impliedHomeProb = 1/homeOdd;
-    if (homeProb > impliedHomeProb) {
-      analysis += `<p>🔵 Value Bet para ${home} (probabilidade ${Math.round(homeProb*100)}% vs odd ${homeOdd})</p>`;
-    } else {
-      analysis += `<p>🟡 Sem Value Bet claro</p>`;
-    }
-  } else {
-    analysis += `<p>Sem análise disponível.</p>`;
-  }
-
   document.getElementById("detail").innerHTML = `
-    <h2>${home} vs ${away}</h2>
-    ${oddsHtml}
-    ${predHtml}
-    ${analysis}
+    <h2>${name}</h2>
+    <label>Descrição do mercado (ex: +1 gol, Over 2.5):</label>
+    <input id="marketDesc" type="text" placeholder="Ex: +1 gol">
+
+    <label>Insere a odd decimal:</label>
+    <input id="manualOdd" type="number" step="0.01" placeholder="Ex: 1.50">
+
+    <button onclick="analyzeOdd()">📊 Analisar Odd</button>
+    <div id="analysisResult"></div>
   `;
 }
 
-function closeDetail() {
+// Fechar detalhe e voltar
+function closeDetail(){
   document.getElementById("detailPanel").style.display = "none";
   fetchFixtures();
+}
+
+// Analisar a odd manual que o utilizador introduziu
+function analyzeOdd(){
+  const oddStr = document.getElementById("manualOdd").value;
+  const market = document.getElementById("marketDesc").value.trim() || "mercado";
+  const resultEl = document.getElementById("analysisResult");
+  const odd = parseFloat(oddStr);
+
+  if(!odd || odd <= 1){
+    resultEl.innerHTML = `<p class="red">⚠️ Introduz uma odd válida.</p>`;
+    return;
+  }
+
+  // Calcular probabilidade implícita
+  const implied = (1 / odd) * 100;
+
+  let text = `<p>📈 Probabilidade implícita para <strong>${market}</strong>: <strong>${implied.toFixed(2)}%</strong></p>`;
+
+  // Base fixa simples (50%)
+  const base = 50;
+  if(implied > base) text += `<p class="green">🟢 Probabilidade implícita acima da base (${base}%) → potencial valor</p>`;
+  else if(implied == base) text += `<p class="yellow">🟡 Igual à base (${base}%) → cautela</p>`;
+  else text += `<p class="red">🔴 Abaixo da base (${base}%) → não compensa</p>`;
+
+  resultEl.innerHTML = text;
 }
 
 fetchFixtures();
