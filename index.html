@@ -8,60 +8,27 @@
 <style>
 body { background:#0f0f0f; color:#fff; font-family: Arial, sans-serif; padding:20px; }
 h1 { text-align:center; margin-bottom:10px; }
-.menu, .filters, .tab-buttons { text-align:center; margin-bottom:15px; }
-.tab-buttons button { margin:0 5px; padding:8px 12px; border:none; border-radius:8px; background:#3498db; color:#fff; cursor:pointer; }
-.tab-buttons button:hover { background:#2980b9; }
-.games-list, .game-panel, .stats, .analysis, .history, .history-tab { margin-top:20px; }
-.card { padding:15px; border-radius:10px; margin-top:10px; font-size:16px; transition:all 0.3s ease; }
+.games-list, .game-panel, .stats, .analysis { margin-top:20px; }
+.card { padding:15px; border-radius:10px; margin-top:10px; font-size:16px; }
 .blue { background:#3498db; } .green { background:#2ecc71; } .yellow { background:#f1c40f; color:#000; } .red { background:#e74c3c; }
-button, select, input { padding:8px; border-radius:8px; font-size:16px; margin:5px; }
-canvas { background:#1e1e1e; border-radius:10px; margin-top:10px; }
+button { padding:8px 12px; border:none; border-radius:8px; cursor:pointer; margin:5px; background:#3498db; color:#fff; }
 .search-input { width: 100%; max-width:400px; margin:10px auto; display:block; padding:8px; border-radius:8px; font-size:16px; }
-.timer { text-align:center; margin-top:10px; font-size:14px; color:#aaa; }
-.history-tab { display:none; }
+canvas { background:#1e1e1e; border-radius:10px; margin-top:10px; }
 </style>
 </head>
 <body>
 
 <h1>⚡ Apostas Live PRO MAX</h1>
 
-<div class="menu">
-  <label>Escolher Esporte: 
-    <select id="sportSelect">
-      <option value="football">Futebol</option>
-      <option value="basket">Basquete (NBA)</option>
-    </select>
-  </label>
-</div>
-
-<div class="filters">
-  <input type="number" id="minOdd" placeholder="Odd mínima" min="1" step="0.01">
-  <input type="number" id="minShots" placeholder="Remates mínimos / pontos" min="0">
-  <input type="number" id="minCorners" placeholder="Cantos / Assists mínimos" min="0">
-</div>
-
-<input type="text" id="teamSearch" class="search-input" placeholder="Pesquisar equipe...">
-
-<div class="tab-buttons">
-  <button onclick="openTab('live')">Ao Vivo / Odds</button>
-  <button onclick="openTab('history')">Histórico 5 Jogos</button>
-</div>
-
-<div id="live" class="games-list"></div>
-<div id="history" class="history-tab"></div>
+<div class="games-list" id="liveGames"></div>
 
 <div class="game-panel" id="gamePanel" style="display:none;">
 <h2 id="gameTitle"></h2>
-<label>Mercado:
-<select id="marketSelect"></select></label>
-<label>Período:
-<select id="halfSelect"></select></label>
-
 <div class="stats" id="stats"></div>
 <canvas id="chart"></canvas>
 <div class="analysis" id="analysis"></div>
-<div class="history" id="historyGraph"></div>
 <audio id="alertSound" src="https://www.soundjay.com/buttons/beep-07.mp3"></audio>
+<button onclick="closeGame()">Fechar</button>
 </div>
 
 <script>
@@ -71,151 +38,141 @@ const API_HOST_FOOTBALL = "api-football-v1.p.rapidapi.com";
 const API_HOST_BASKET = "api-nba-v1.p.rapidapi.com";
 const API_HOST_ODDS = "oddsapi-oddspapi.p.rapidapi.com";
 
-// --- VARIÁVEIS ---
-let allGames=[], chart=null, historyData={}, oddsHistory={}, favorites=JSON.parse(localStorage.getItem("favorites"))||[], currentSport="football", updateInterval=60;
-const markets={ football:["goals","shotsOnTarget","corners","cards"], basket:["points2","points3","assists","rebounds"]};
-const halfs={ football:["first","second","full"], basket:["1","2","3","4","full"]};
+let liveGames = [], historyData = {}, oddsHistory = {}, chart=null;
 
-// --- FUNÇÕES ---
-function updateMarketPeriod(){
-  const m=document.getElementById("marketSelect"), h=document.getElementById("halfSelect");
-  m.innerHTML=""; halfs[currentSport].forEach(hh=>m.appendChild(new Option(hh,hh)));
-  h.innerHTML=""; markets[currentSport].forEach(mm=>h.appendChild(new Option(mm,mm)));
-}
+// --- FUNÇÃO PARA BUSCAR JOGOS AO VIVO ---
+async function fetchLiveGames() {
+  liveGames = [];
+  try {
+    // Futebol ao vivo
+    const resFootball = await fetch(`https://${API_HOST_FOOTBALL}/v3/fixtures?live=all`, {
+      method:"GET",
+      headers:{"X-RapidAPI-Key":API_KEY,"X-RapidAPI-Host":API_HOST_FOOTBALL}
+    });
+    const dataFootball = await resFootball.json();
+    liveGames.push(...(dataFootball.response || []));
 
-document.getElementById("sportSelect").addEventListener("change",(e)=>{
-  currentSport=e.target.value; document.getElementById("gamePanel").style.display="none";
-  updateMarketPeriod(); fetchLiveGames(); fetchHistoryTab();
-});
+    // NBA ao vivo
+    const resBasket = await fetch(`https://${API_HOST_BASKET}/games/live`, {
+      method:"GET",
+      headers:{"X-RapidAPI-Key":API_KEY,"X-RapidAPI-Host":API_HOST_BASKET}
+    });
+    const dataBasket = await resBasket.json();
+    liveGames.push(...(dataBasket.api?.games || []));
 
-document.getElementById("teamSearch").addEventListener("input",()=>{showLiveGames(document.getElementById("teamSearch").value);});
-
-// Temporizador para atualizar ao vivo
-let countdown=updateInterval;
-setInterval(()=>{ countdown--; if(countdown<=0){fetchLiveGames(); fetchHistoryTab(); countdown=updateInterval;} },1000);
-
-// Notificações favoritos
-if("Notification" in window){ if(Notification.permission!=="granted") Notification.requestPermission();}
-function notifyFavorite(fixtureId,title,message){ if(favorites.includes(fixtureId) && Notification.permission==="granted") new Notification(title,{body:message});}
-
-// Tabs
-function openTab(tab){
-  document.getElementById("live").style.display=tab==="live"?"block":"none";
-  document.getElementById("history").style.display=tab==="history"?"block":"none";
-}
-
-// --- Ao Vivo ---
-async function fetchLiveGames(){
-  allGames=[];
-  try{
-    const url=currentSport==="football"?`https://${API_HOST_FOOTBALL}/v3/fixtures?live=all`:`https://${API_HOST_BASKET}/games/live`;
-    const res=await fetch(url,{headers:{"X-RapidAPI-Key":API_KEY,"X-RapidAPI-Host":currentSport==="football"?API_HOST_FOOTBALL:API_HOST_BASKET}});
-    const data=await res.json();
-    allGames=currentSport==="football"?data.response:data.api.games;
     showLiveGames();
-  }catch(err){console.error(err);}
+  } catch(e) { console.error(e); }
 }
 
-function showLiveGames(search=""){
-  const container=document.getElementById("live"); container.innerHTML="<h2>Jogos Ao Vivo / Odds</h2>";
-  const filtered=allGames.filter(g=>{
-    return g.teams?.home?.name.toLowerCase().includes(search.toLowerCase()) || g.teams?.away?.name.toLowerCase().includes(search.toLowerCase());
-  });
-  if(filtered.length===0){container.innerHTML+="<p>Nenhum jogo atende aos filtros</p>"; return;}
-  filtered.forEach(game=>{
-    const gameId=game.fixture?.id||game.gameId;
-    const isFav=favorites.includes(gameId);
-    const el=document.createElement("div");
-    el.classList.add("card",isFav?"blue":"green");
-    el.innerHTML=`<strong>${game.teams.home.name} vs ${game.teams.away.name}</strong><br>
-    <button onclick="selectGame(${gameId},'${game.teams.home.name}','${game.teams.away.name}',${game.league?.id||0})">Ver Mercado e Odds</button>
-    <button onclick="toggleFavorite(${gameId},this)">⭐</button>`;
+// --- MOSTRAR JOGOS AO VIVO ---
+function showLiveGames() {
+  const container = document.getElementById("liveGames");
+  container.innerHTML = "<h2>Jogos Ao Vivo</h2>";
+  if(liveGames.length===0){ container.innerHTML+="<p>Nenhum jogo ao vivo no momento</p>"; return; }
+  liveGames.forEach(game => {
+    const id = game.fixture?.id || game.gameId;
+    const home = game.teams?.home?.name || game.homeTeam?.full_name;
+    const away = game.teams?.away?.name || game.visitorTeam?.full_name;
+    const el = document.createElement("div");
+    el.classList.add("card");
+    el.innerHTML = `<strong>${home} vs ${away}</strong> <button onclick="selectGame('${id}','${home}','${away}')">➡ Ver Detalhes</button>`;
     container.appendChild(el);
   });
 }
 
-// Favoritos
-function toggleFavorite(gameId,btn){
-  const index=favorites.indexOf(gameId);
-  if(index>-1){favorites.splice(index,1); btn.parentElement.classList.remove("blue"); btn.parentElement.classList.add("green");}
-  else{favorites.push(gameId); btn.parentElement.classList.remove("green"); btn.parentElement.classList.add("blue");}
-  localStorage.setItem("favorites",JSON.stringify(favorites));
-}
-
-// Selecionar jogo
-function selectGame(fixtureId,home,away,leagueId){
+// --- SELECIONAR JOGO ---
+async function selectGame(fixtureId, home, away) {
   document.getElementById("gamePanel").style.display="block";
-  document.getElementById("gameTitle").textContent=`${home} vs ${away}`;
-  if(!historyData[fixtureId]) historyData[fixtureId]={minutes:[],home:[],away:[]};
-  if(!oddsHistory[fixtureId]) oddsHistory[fixtureId]={values:[]};
-  fetchStats(fixtureId,leagueId);
-  document.getElementById("marketSelect").onchange=()=>fetchStats(fixtureId,leagueId);
-  document.getElementById("halfSelect").onchange=()=>fetchStats(fixtureId,leagueId);
+  document.getElementById("gameTitle").textContent = `${home} vs ${away}`;
+
+  if(!historyData[fixtureId]) historyData[fixtureId] = {minutes:[],home:[],away:[]};
+  if(!oddsHistory[fixtureId]) oddsHistory[fixtureId] = {values:[]};
+
+  await fetchStats(fixtureId, home, away);
 }
 
-// Estatísticas + Análise
-async function fetchStats(fixtureId,leagueId){
-  try{
-    const oddsRes=await fetch(`https://${API_HOST_ODDS}/v4/odds?bookmaker=22bet&sport=${currentSport}&fixtureId=${fixtureId}`,{headers:{"X-RapidAPI-Key":API_KEY,"X-RapidAPI-Host":API_HOST_ODDS}});
-    const oddsData=await oddsRes.json();
-    let odd=oddsData?.odds?.[0]?.value||1.9;
-    let statsData=[];
-    if(currentSport==="football"){
-      const res=await fetch(`https://${API_HOST_FOOTBALL}/v3/fixtures/statistics?fixture=${fixtureId}`,{headers:{"X-RapidAPI-Key":API_KEY,"X-RapidAPI-Host":API_HOST_FOOTBALL}});
-      const data=await res.json(); statsData=data.response||[];
-    } else {
-      const res=await fetch(`https://${API_HOST_BASKET}/games/${fixtureId}`,{headers:{"X-RapidAPI-Key":API_KEY,"X-RapidAPI-Host":API_HOST_BASKET}});
-      const data=await res.json(); statsData=data.api?.games||[];
-    }
-    renderStats(statsData,odd,fixtureId);
-  }catch(err){console.error(err);}
+// --- BUSCAR ESTATÍSTICAS E ODDS ---
+async function fetchStats(fixtureId, home, away) {
+  try {
+    // Odd 22Bet
+    const oddsRes = await fetch(`https://${API_HOST_ODDS}/v4/odds?bookmaker=22bet&sport=football&fixtureId=${fixtureId}`,{
+      headers:{"X-RapidAPI-Key":API_KEY,"X-RapidAPI-Host":API_HOST_ODDS}
+    });
+    const oddsData = await oddsRes.json();
+    const odd = oddsData?.odds?.[0]?.value || 1.9;
+
+    // Estatísticas futebol ou NBA
+    let statsData = [];
+    try{
+      const res = await fetch(`https://${API_HOST_FOOTBALL}/v3/fixtures/statistics?fixture=${fixtureId}`,{
+        headers:{"X-RapidAPI-Key":API_KEY,"X-RapidAPI-Host":API_HOST_FOOTBALL}
+      });
+      const data = await res.json(); statsData = data.response || [];
+    }catch{ statsData = [{team:{name:home}, statistics:[{value:0}]},{team:{name:away}, statistics:[{value:0}]}]; }
+
+    renderStats(statsData, odd, fixtureId);
+  } catch(e){ console.error(e); }
 }
 
-function renderStats(statsData,odd,fixtureId){
-  const statsEl=document.getElementById("stats"), analysisEl=document.getElementById("analysis"), historyEl=document.getElementById("historyGraph");
-  statsEl.innerHTML="<h3>Estatísticas</h3>"; analysisEl.innerHTML="<h3>Análise</h3>"; historyEl.innerHTML="<h3>Histórico</h3>";
-  let homeVal=statsData[0]?.statistics?.[0]?.value||5;
-  let awayVal=statsData[1]?.statistics?.[0]?.value||3;
-  statsEl.innerHTML+=`<p><strong>${statsData[0]?.team?.name||"Home"}:</strong> ${homeVal}<br><strong>${statsData[1]?.team?.name||"Away"}:</strong> ${awayVal}</p>`;
-  
-  const now=new Date().getTime()/1000;
+// --- RENDERIZAR ESTATÍSTICAS E ANÁLISE ---
+function renderStats(statsData, odd, fixtureId) {
+  const statsEl = document.getElementById("stats");
+  const analysisEl = document.getElementById("analysis");
+  statsEl.innerHTML="<h3>Estatísticas</h3>";
+  analysisEl.innerHTML="<h3>Análise</h3>";
+
+  const homeVal = statsData[0]?.statistics?.[0]?.value || 0;
+  const awayVal = statsData[1]?.statistics?.[0]?.value || 0;
+  statsEl.innerHTML += `<p><strong>${statsData[0]?.team?.name || "Home"}:</strong> ${homeVal}<br>
+                        <strong>${statsData[1]?.team?.name || "Away"}:</strong> ${awayVal}</p>`;
+
+  const now = new Date().getTime()/1000;
   historyData[fixtureId].minutes.push(now);
   historyData[fixtureId].home.push(homeVal);
   historyData[fixtureId].away.push(awayVal);
   oddsHistory[fixtureId].values.push(odd);
-  if(historyData[fixtureId].minutes.length>20){historyData[fixtureId].minutes.shift(); historyData[fixtureId].home.shift(); historyData[fixtureId].away.shift(); oddsHistory[fixtureId].values.shift();}
-  
-  const ctx=document.getElementById("chart").getContext("2d");
+  if(historyData[fixtureId].minutes.length>20){
+    historyData[fixtureId].minutes.shift();
+    historyData[fixtureId].home.shift();
+    historyData[fixtureId].away.shift();
+    oddsHistory[fixtureId].values.shift();
+  }
+
+  // Gráfico
+  const ctx = document.getElementById("chart").getContext("2d");
   if(chart) chart.destroy();
-  chart=new Chart(ctx,{type:'line',data:{labels:historyData[fixtureId].minutes.map(t=>new Date(t*1000).toLocaleTimeString()),datasets:[
-    {label:statsData[0]?.team?.name||"Home",data:historyData[fixtureId].home,borderColor:'#2ecc71',fill:false},
-    {label:statsData[1]?.team?.name||"Away",data:historyData[fixtureId].away,borderColor:'#e74c3c',fill:false},
-    {label:"Odd 22Bet",data:oddsHistory[fixtureId].values,borderColor:'#3498db',fill:false}
-  ]},options:{responsive:true,plugins:{legend:{display:true}}}});
+  chart = new Chart(ctx,{type:'line',data:{
+    labels:historyData[fixtureId].minutes.map(t=>new Date(t*1000).toLocaleTimeString()),
+    datasets:[
+      {label:statsData[0]?.team?.name||"Home", data:historyData[fixtureId].home, borderColor:'#2ecc71', fill:false},
+      {label:statsData[1]?.team?.name||"Away", data:historyData[fixtureId].away, borderColor:'#e74c3c', fill:false},
+      {label:"Odd 22Bet", data:oddsHistory[fixtureId].values, borderColor:'#3498db', fill:false}
+    ]
+  }, options:{responsive:true}});
   
-  let message="", alertSound=document.getElementById("alertSound");
-  let sum=homeVal+awayVal;
-  if(sum>=5 && odd>=1.8){message=`<div class="card blue">🔵 Entrada Excelente — Odds favorável (${odd})</div>`; alertSound.play(); notifyFavorite(fixtureId,`${statsData[0]?.team?.name||"Home"} vs ${statsData[1]?.team?.name||"Away"}`,"Entrada Excelente 🔵 — verifique o jogo!");}
-  else if(sum>0){message=`<div class="card green">🟢 Boa entrada — Avaliar odd (${odd})</div>`;}
-  else{message=`<div class="card yellow">🟡 Instável — Pouca ação</div>`;}
-  analysisEl.innerHTML+=message;
+  // Análise automática
+  const sum = homeVal+awayVal;
+  const alertSound = document.getElementById("alertSound");
+  let message="";
+  if(sum>=5 && odd>=1.8){
+    message=`<div class="card blue">🔵 Entrada Excelente — Odds favorável (${odd})</div>`;
+    alertSound.play();
+  } else if(sum>0){
+    message=`<div class="card green">🟢 Boa entrada — Avaliar odd (${odd})</div>`;
+  } else {
+    message=`<div class="card yellow">🟡 Instável — Pouca ação</div>`;
+  }
+  analysisEl.innerHTML += message;
 }
 
-// Histórico últimos 5 jogos reais
-async function fetchHistoryTab(){
-  const container=document.getElementById("history"); 
-  container.innerHTML="<h2>Últimos 5 Jogos / Histórico</h2>";
-  try{
-    const teamsToFetch=allGames.slice(0,5).map(g=>g.teams.home.name);
-    for(const team of teamsToFetch){
-      container.innerHTML+=`<div class="card"><strong>${team}</strong><br>Estatísticas reais + Odd média + Gráfico comparativo</div>`;
-    }
-  }catch(err){console.error(err);}
+// --- FECHAR PAINEL ---
+function closeGame(){
+  document.getElementById("gamePanel").style.display="none";
 }
 
-// Inicialização
-updateMarketPeriod(); fetchLiveGames(); fetchHistoryTab();
+// --- INICIALIZAÇÃO ---
+fetchLiveGames();
+setInterval(fetchLiveGames, 60*1000); // Atualiza a cada 60s
 </script>
-
 </body>
 </html>
