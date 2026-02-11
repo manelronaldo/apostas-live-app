@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang=“pt”>
+<head>
+<meta charset=“UTF-8”>
+<meta name=“viewport” content=“width=device-width, initial-scale=1”>
+<title>Apostas Live</title>
+
+<style>
+body {
+  background:#0f0f0f;
+  color:#ffffff;
+  font-family: Arial, sans-serif;
+  padding:20px;
+}
+
+h1 {
+  text-align:center;
+}
+
+.card {
+  padding:15px;
+  border-radius:12px;
+  margin-bottom:15px;
+  font-weight:bold;
+  text-align:center;
+}
+
+.green { background:#2ecc71; }
+.red { background:#e74c3c; }
+.yellow { background:#f1c40f; color:#000; }
+.blue { background:#3498db; }
+
+.box {
+  background:#1e1e1e;
+  padding:15px;
+  border-radius:12px;
+  margin-top:20px;
+}
+
+input, select {
+  width:100%;
+  padding:10px;
+  border-radius:8px;
+  border:none;
+  margin-top:8px;
+  font-size:16px;
+}
+
+button {
+  margin-top:12px;
+  width:100%;
+  padding:12px;
+  border:none;
+  border-radius:10px;
+  font-size:16px;
+  background:#3498db;
+  color:#fff;
+}
+</style>
+</head>
+
+<body>
+
+<h1>📊 Apostas Live</h1>
+
+<div class=“card green”>🟢 Entrar (valor)</div>
+<div class=“card blue”>🔵 Odd perfeita</div>
+<div class=“card yellow”>🟡 Instável</div>
+<div class=“card red”>🔴 Evitar</div>
+
+<div class=“box”>
+  <h3>Registar aposta</h3>
+
+  <input placeholder=“Jogo (ex: Benfica vs Porto)”>
+  
+  <select>
+    <option>Mercado</option>
+    <option>Cantos</option>
+    <option>Cartões</option>
+    <option>Golos</option>
+  </select>
+
+  <input placeholder=“Odd”>
+  <input placeholder=“Stake (€)”>
+  <button>Guardar</button>
+</div>
+
+</body>
+</html>
