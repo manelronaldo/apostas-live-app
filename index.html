@@ -1,125 +1,35 @@
 <!DOCTYPE html>
-<html lang="pt">
+<html>
 <head>
-<meta charset="UTF-8">
-<title>⚽🏀 Jogos Ao Vivo Interativos</title>
-<style>
-  body { font-family: Arial; background: #f4f4f4; padding: 20px; }
-  h1 { text-align: center; }
-  .tabs { margin-bottom: 10px; }
-  .tab { cursor: pointer; display: inline-block; padding: 10px 15px; margin-right: 5px; border-radius: 6px; background: #ddd; }
-  .tab.active { background: #4CAF50; color: white; }
-  #games-container { background: #fff; border-radius: 6px; padding: 15px; min-height: 150px; }
-  .game { border-bottom: 1px solid #eee; padding: 10px 0; }
-  .game input { width: 70px; margin-right: 5px; }
-  #search { width: 100%; padding: 8px; margin-bottom: 10px; border-radius: 6px; border: 1px solid #ccc; }
-  button { cursor: pointer; }
-</style>
+  <title>Apostas Live</title>
 </head>
 <body>
 
-<h1>⚽🏀 Jogos Ao Vivo Interativos</h1>
+  <h1>Jogos ao Vivo</h1>
+  <button onclick="carregarJogos()">Ver Jogos</button>
+  <div id="jogos"></div>
 
-<div class="tabs">
-  <span class="tab active" onclick="switchTab('football', event)">Futebol</span>
-  <span class="tab" onclick="switchTab('basket', event)">Basket</span>
-</div>
+  <script>
+    async function carregarJogos() {
+      const resposta = await fetch("https://api.football-data.org/v4/matches", {
+        headers: {
+          "X-Auth-Token": "32ef306218be45adcdb0932acf553c2535d7b055"
+        }
+      });
 
-<input type="text" id="search" placeholder="🔍 Filtrar por equipe..." oninput="filterGames()">
+      const dados = await resposta.json();
+      const div = document.getElementById("jogos");
+      div.innerHTML = "";
 
-<div id="games-container">🔄 A carregar jogos…</div>
-
-<script>
-const API_KEY = "a8d44cabdbmsh94b938267b0e53p158c92jsn7bb96690b99";
-let currentTab = "football";
-let allGames = []; // guarda todos os jogos carregados
-
-function switchTab(tab, event) {
-  currentTab = tab;
-  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
-  event.target.classList.add("active");
-  document.getElementById("search").value = "";
-  loadGames();
-}
-
-function renderGames(games) {
-  allGames = games;
-  const container = document.getElementById("games-container");
-  container.innerHTML = "";
-
-  if (!games || games.length === 0) {
-    container.innerHTML = "📍 Não há jogos ao vivo para mostrar.";
-    return;
-  }
-
-  games.forEach(game => {
-    const home = game.event_home_team || game.match_hometeam_name || "Equipe A";
-    const away = game.event_away_team || game.match_awayteam_name || "Equipe B";
-    const date = game.event_date || game.match_date || "";
-    const time = game.event_time || game.match_time || "";
-
-    const div = document.createElement("div");
-    div.className = "game";
-    div.dataset.home = home.toLowerCase();
-    div.dataset.away = away.toLowerCase();
-    div.innerHTML = `
-      <strong>${home} vs ${away}</strong> 🔴 AO VIVO<br>
-      🕒 ${date} ${time}<br><br>
-      Odd: <input type="number" step="0.01" id="odd-${game.event_key || game.match_id}" placeholder="1.5">
-      <button onclick="checkOdd('${game.event_key || game.match_id}')">Ver se compensa +1 golo/ponto</button>
-    `;
-    container.appendChild(div);
-  });
-}
-
-function checkOdd(id) {
-  const oddInput = document.getElementById(`odd-${id}`);
-  const odd = parseFloat(oddInput.value);
-  if (!odd || odd <= 0) return alert("Insere uma odd válida!");
-  alert(`Odd ${odd} para +1 golo/ponto. Potencial retorno: ${(odd * 1).toFixed(2)}`);
-}
-
-function filterGames() {
-  const query = document.getElementById("search").value.toLowerCase();
-  const filtered = allGames.filter(game => {
-    const home = (game.event_home_team || game.match_hometeam_name || "").toLowerCase();
-    const away = (game.event_away_team || game.match_awayteam_name || "").toLowerCase();
-    return home.includes(query) || away.includes(query);
-  });
-  renderGames(filtered);
-}
-
-async function loadGames() {
-  const container = document.getElementById("games-container");
-  container.innerHTML = "🔄 A carregar jogos…";
-
-  // Define endpoint para Futebol ou Basket ao vivo
-  const sport = currentTab === "football" ? "Football" : "Basketball";
-  const url = `https://allsportsapi.p.rapidapi.com/${sport}/?met=Livescore`;
-
-  try {
-    const res = await fetch(url, {
-      method: "GET",
-      headers: {
-        "X-RapidAPI-Key": API_KEY,
-        "X-RapidAPI-Host": "allsportsapi.p.rapidapi.com"
-      }
-    });
-    const data = await res.json();
-    let gamesList = data.result || [];
-    renderGames(gamesList);
-  } catch(err) {
-    console.error(err);
-    container.innerHTML = "📍 Não há jogos ao vivo para mostrar.";
-  }
-}
-
-// Atualiza a cada 30 segundos
-setInterval(loadGames, 30000);
-
-// Carrega ao iniciar
-loadGames();
-</script>
+      dados.matches.slice(0, 10).forEach(jogo => {
+        div.innerHTML += `
+          <p>
+            ${jogo.homeTeam.name} vs ${jogo.awayTeam.name}
+          </p>
+        `;
+      });
+    }
+  </script>
 
 </body>
 </html>
