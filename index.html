@@ -1,35 +1,182 @@
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="pt">
 <head>
-  <title>Apostas Live</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Jogos de Hoje</title>
+  <style>
+    body{font-family:Arial, sans-serif; margin:20px}
+    h1{margin:0 0 10px}
+    .row{display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:10px 0 16px}
+    input,button{padding:10px; font-size:14px}
+    button{cursor:pointer}
+    .muted{color:#666}
+    .error{color:#b00020; white-space:pre-wrap}
+    ul{padding-left:18px}
+    li{margin:8px 0}
+    code{background:#f2f2f2; padding:2px 6px; border-radius:6px}
+  </style>
 </head>
 <body>
+  <h1>Jogos de Hoje</h1>
+  <div class="muted">Fonte: SoccerdataAPI via Netlify Function</div>
 
-  <h1>Jogos ao Vivo</h1>
-  <button onclick="carregarJogos()">Ver Jogos</button>
-  <div id="jogos"></div>
+  <div class="row">
+    <label>Data:
+      <input id="date" type="date" />
+    </label>
+    <button id="btn">Carregar</button>
+    <span id="status" class="muted"></span>
+  </div>
+
+  <div id="error" class="error"></div>
+  <ul id="list"></ul>
 
   <script>
-    async function carregarJogos() {
-      const resposta = await fetch("https://api.football-data.org/v4/matches", {
-        headers: {
-          "X-Auth-Token": "32ef306218be45adcdb0932acf553c2535d7b055"
-        }
-      });
+    const $date = document.getElementById("date");
+    const $btn = document.getElementById("btn");
+    const $status = document.getElementById("status");
+    const $error = document.getElementById("error");
+    const $list = document.getElementById("list");
 
-      const dados = await resposta.json();
-      const div = document.getElementById("jogos");
-      div.innerHTML = "";
-
-      dados.matches.slice(0, 10).forEach(jogo => {
-        div.innerHTML += `
-          <p>
-            ${jogo.homeTeam.name} vs ${jogo.awayTeam.name}
-          </p>
-        `;
-      });
+    function todayISO() {
+      const d = new Date();
+      const pad = (n) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
     }
-  </script>
 
+    function clearUI() {
+      $error.textContent = "";
+      $list.innerHTML = "";
+      $status.textContent = "";
+    }
+
+    function showStatus(txt) { $status.textContent = txt; }
+
+    function pick(arr, ...keys) {
+      for (const k of keys) if (arr && typeof arr === "object" && arr[k] != null) return arr[k];
+      return null;
+    }
+
+    // tenta descobrir onde estão os jogos no JSON (porque APIs variam)
+    function extractMatches(json) {
+      if (Array.isArray(json)) return json;
+      if (!json || typeof json !== "object") return [];
+
+      // comuns:
+      const direct =
+        json.data || json.results || json.matches || json.response || json.items;
+
+      if (Array.isArray(direct)) return direct;
+
+      // às vezes vem {data:{matches:[...]}}
+      if (direct && typeof direct === "object") {
+        const nested = direct.matches || direct.data || direct.results || direct.items;
+        if (Array.isArray(nested)) return nested;
+      }
+
+      return [];
+    }
+
+    function formatMatch(m) {
+      // nomes das equipas (variam muito)
+      const home =
+        pick(m, "home_team_name", "home_name", "homeTeam", "home", "home_team") ||
+        pick(m?.home_team, "name") ||
+        pick(m?.homeTeam, "name") ||
+        "Casa";
+
+      const away =
+        pick(m, "away_team_name", "away_name", "awayTeam", "away", "away_team") ||
+        pick(m?.away_team, "name") ||
+        pick(m?.awayTeam, "name") ||
+        "Fora";
+
+      // hora/data
+      const time =
+        pick(m, "time", "kickoff", "match_time", "start_time", "utc_date", "date_time") ||
+        pick(m?.fixture, "date") ||
+        "";
+
+      // resultado (se existir)
+      const hs =
+        pick(m, "home_score", "score_home", "home_goals") ??
+        pick(m?.scores, "home_score") ??
+        pick(m?.score, "home");
+      const as =
+        pick(m, "away_score", "score_away", "away_goals") ??
+        pick(m?.scores, "away_score") ??
+        pick(m?.score, "away");
+
+      const score = (hs != null && as != null) ? `${hs}-${as}` : "";
+
+      // liga
+      const league =
+        pick(m, "league_name", "competition_name", "tournament", "league") ||
+        pick(m?.league, "name") ||
+        pick(m?.competition, "name") ||
+        "";
+
+      return { home, away, time, score, league };
+    }
+
+    async function carregar() {
+      clearUI();
+      const date = $date.value || todayISO();
+      showStatus("A carregar...");
+
+      try {
+        const url = `/.netlify/functions/jogos?date_from=${encodeURIComponent(date)}&date_to=${encodeURIComponent(date)}`;
+        const res = await fetch(url);
+
+        const text = await res.text();
+
+        if (!res.ok) {
+          // pode vir JSON de erro ou texto
+          let details = text;
+          try { details = JSON.stringify(JSON.parse(text), null, 2); } catch {}
+          throw new Error(`Erro HTTP ${res.status}\n\nResposta:\n${details}`);
+        }
+
+        let json;
+        try { json = JSON.parse(text); }
+        catch {
+          throw new Error(`A resposta não é JSON.\n\nRecebi:\n${text.slice(0, 400)}`);
+        }
+
+        const matches = extractMatches(json);
+
+        showStatus(`OK • ${matches.length} jogo(s)`);
+
+        if (!matches.length) {
+          const li = document.createElement("li");
+          li.textContent = "Sem jogos para mostrar nesta data.";
+          $list.appendChild(li);
+          return;
+        }
+
+        for (const m of matches) {
+          const fm = formatMatch(m);
+          const li = document.createElement("li");
+          li.innerHTML = `
+            <strong>${fm.home}</strong> vs <strong>${fm.away}</strong>
+            ${fm.score ? ` • <code>${fm.score}</code>` : ""}
+            ${fm.time ? ` • <span class="muted">${fm.time}</span>` : ""}
+            ${fm.league ? ` • <span class="muted">${fm.league}</span>` : ""}
+          `;
+          $list.appendChild(li);
+        }
+
+      } catch (err) {
+        showStatus("");
+        $error.textContent = String(err?.message || err);
+      }
+    }
+
+    // init
+    $date.value = todayISO();
+    $btn.addEventListener("click", carregar);
+    carregar();
+  </script>
 </body>
 </html>
