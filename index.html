@@ -1,39 +1,62 @@
-<script>
-  const WORKER_URL = "https://apostas-live-api.manelronaldo1.workers.dev/";
+<!doctype html>
+<html lang="pt">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Jogos ao Vivo</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    h1 { margin: 0 0 6px; }
+    .sub { opacity: .75; margin-bottom: 16px; }
+    button { padding: 10px 14px; border-radius: 10px; border: 1px solid #ddd; cursor: pointer; }
+    button:hover { opacity: .9; }
+    #jogos { margin-top: 16px; }
+  </style>
+</head>
 
-  function esc(s) {
-    return String(s ?? "")
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
-  }
+<body>
+  <h1>Jogos ao Vivo</h1>
+  <div class="sub">Fonte: SoccerdataAPI via Cloudflare Worker</div>
 
-  function renderErro(msg, extra) {
-    const jogosDiv = document.getElementById("jogos");
-    jogosDiv.innerHTML = `
-      <div style="color:#b00020;white-space:pre-wrap;border:1px solid #f2c2c2;background:#fff5f5;padding:10px;border-radius:10px">
-        ${esc(msg)}
-        ${extra ? "\n\n" + esc(extra) : ""}
-      </div>
-    `;
-  }
+  <!-- ISTO é o que eu disse: botão + div -->
+  <button id="btnCarregar">Carregar</button>
+  <div id="jogos"></div>
 
-  function renderJogos(data) {
-    const jogosDiv = document.getElementById("jogos");
-    const jogos = data?.results || [];
-    const count = data?.count ?? jogos.length;
+  <script>
+    const WORKER_URL = "https://apostas-live-api.manelronaldo1.workers.dev/";
 
-    if (!jogos.length) {
-      jogosDiv.innerHTML = `<p>Sem jogos ao vivo agora. (count: ${esc(count)})</p>`;
-      return;
+    function esc(s) {
+      return String(s ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
     }
 
-    jogosDiv.innerHTML = `
-      <div style="margin-bottom:10px;opacity:.8">Jogos encontrados: <b>${esc(count)}</b></div>
-      ${jogos
-        .map((j) => {
+    function renderErro(msg, extra) {
+      const jogosDiv = document.getElementById("jogos");
+      jogosDiv.innerHTML = `
+        <div style="color:#b00020;white-space:pre-wrap;border:1px solid #f2c2c2;background:#fff5f5;padding:10px;border-radius:10px">
+          ${esc(msg)}
+          ${extra ? "\n\n" + esc(extra) : ""}
+        </div>
+      `;
+    }
+
+    function renderJogos(data) {
+      const jogosDiv = document.getElementById("jogos");
+      const jogos = data?.results || [];
+      const count = data?.count ?? jogos.length;
+
+      if (!jogos.length) {
+        jogosDiv.innerHTML = `<p>Sem jogos ao vivo agora. (count: ${esc(count)})</p>`;
+        return;
+      }
+
+      jogosDiv.innerHTML = `
+        <div style="margin-bottom:10px;opacity:.8">Jogos encontrados: <b>${esc(count)}</b></div>
+        ${jogos.map((j) => {
           const liga = j?.league_name || "Liga";
           const pais = j?.country?.name ? ` (${j.country.name})` : "";
           const casa = j?.teams?.home?.name || "Casa";
@@ -48,56 +71,49 @@
             <div style="border:1px solid #ddd;padding:10px;margin:8px 0;border-radius:10px">
               <div style="font-weight:700">${esc(liga)}${esc(pais)}</div>
               <div style="margin-top:4px">${esc(casa)} <b>${esc(gc)} - ${esc(gf)}</b> ${esc(fora)}</div>
-              <div style="opacity:.7;margin-top:4px">Minuto: ${esc(minuto)} ${status ? " • " + esc(status) : ""}${esc(hora)}</div>
+              <div style="opacity:.7;margin-top:4px">Minuto: ${esc(minuto)}${status ? " • " + esc(status) : ""}${esc(hora)}</div>
             </div>
           `;
-        })
-        .join("")}
-    `;
-  }
+        }).join("")}
+      `;
+    }
 
-  async function carregarAoVivo() {
-    const jogosDiv = document.getElementById("jogos");
-    jogosDiv.innerHTML = "<p>A carregar jogos ao vivo...</p>";
+    async function carregarAoVivo() {
+      const jogosDiv = document.getElementById("jogos");
+      jogosDiv.innerHTML = "<p>A carregar jogos ao vivo...</p>";
 
-    try {
-      const r = await fetch(WORKER_URL, { cache: "no-store" });
-      const text = await r.text();
-
-      // tenta parsear JSON
-      let data;
       try {
-        data = JSON.parse(text);
+        const r = await fetch(WORKER_URL, { cache: "no-store" });
+        const text = await r.text();
+
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch {
+          renderErro("Resposta não é JSON (provável erro do endpoint).", text.slice(0, 800));
+          return;
+        }
+
+        if (!r.ok) {
+          renderErro(`Erro HTTP ${r.status}`, JSON.stringify(data, null, 2));
+          return;
+        }
+
+        renderJogos(data);
       } catch (e) {
-        renderErro("Resposta não é JSON (provável erro do endpoint).", text.slice(0, 800));
-        return;
+        renderErro("Falha a fazer fetch ao Worker.", String(e?.message || e));
       }
-
-      if (!r.ok) {
-        renderErro(`Erro HTTP ${r.status}`, JSON.stringify(data, null, 2));
-        return;
-      }
-
-      renderJogos(data);
-    } catch (e) {
-      renderErro("Falha a fazer fetch ao Worker.", String(e?.message || e));
-    }
-  }
-
-  // Liga ao botão
-  document.addEventListener("DOMContentLoaded", () => {
-    const btn = document.getElementById("btnCarregar");
-    if (!btn) {
-      renderErro('Falta o botão com id="btnCarregar" no HTML.', 'Cria: <button id="btnCarregar">Carregar</button>');
-      return;
     }
 
-    btn.addEventListener("click", carregarAoVivo);
+    document.addEventListener("DOMContentLoaded", () => {
+      document.getElementById("btnCarregar").addEventListener("click", carregarAoVivo);
 
-    // carrega logo ao abrir
-    carregarAoVivo();
+      // carrega logo ao abrir
+      carregarAoVivo();
 
-    // auto-refresh (30s)
-    setInterval(carregarAoVivo, 30000);
-  });
-</script>
+      // auto-refresh a cada 30s
+      setInterval(carregarAoVivo, 30000);
+    });
+  </script>
+</body>
+</html>
