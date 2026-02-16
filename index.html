@@ -2,118 +2,103 @@
 <html lang="pt">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Jogos ao Vivo</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 20px; }
-    h1 { margin: 0 0 6px; }
-    .sub { opacity: .75; margin-bottom: 16px; }
-    button { padding: 10px 14px; border-radius: 10px; border: 1px solid #ddd; cursor: pointer; }
-    button:hover { opacity: .9; }
-    #jogos { margin-top: 16px; }
-  </style>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Apostas Live</title>
+  <link rel="stylesheet" href="./css/style.css" />
 </head>
 
 <body>
-  <h1>Jogos ao Vivo</h1>
-  <div class="sub">Fonte: SoccerdataAPI via Cloudflare Worker</div>
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">⚽</div>
+      <div>
+        <div class="title">Apostas Live</div>
+        <div class="subtitle">Ao vivo • Pré-jogo • Múltiplas • Banca</div>
+      </div>
+    </div>
 
-  <!-- ISTO é o que eu disse: botão + div -->
-  <button id="btnCarregar">Carregar</button>
-  <div id="jogos"></div>
+    <div class="topbar-right">
+      <div class="pill" id="bankPill">Banca: €<span id="bankAmount">1000.00</span></div>
+      <button class="btn ghost" id="btnRefresh">Atualizar</button>
+    </div>
+  </header>
 
-  <script>
-    const WORKER_URL = "https://apostas-live-api.manelronaldo1.workers.dev/";
+  <main class="layout">
+    <section class="panel">
+      <nav class="tabs">
+        <button class="tab active" data-tab="live">Ao Vivo</button>
+        <button class="tab" data-tab="pre">Pré-Jogo</button>
+        <button class="tab" data-tab="multis">Múltiplas</button>
+        <button class="tab" data-tab="bank">Banca</button>
+      </nav>
 
-    function esc(s) {
-      return String(s ?? "")
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#039;");
-    }
-
-    function renderErro(msg, extra) {
-      const jogosDiv = document.getElementById("jogos");
-      jogosDiv.innerHTML = `
-        <div style="color:#b00020;white-space:pre-wrap;border:1px solid #f2c2c2;background:#fff5f5;padding:10px;border-radius:10px">
-          ${esc(msg)}
-          ${extra ? "\n\n" + esc(extra) : ""}
+      <div class="toolbar">
+        <div class="field">
+          <label>Filtro</label>
+          <input id="txtFilter" placeholder="liga / equipa (ex: Benfica)" />
         </div>
-      `;
-    }
 
-    function renderJogos(data) {
-      const jogosDiv = document.getElementById("jogos");
-      const jogos = data?.results || [];
-      const count = data?.count ?? jogos.length;
+        <div class="field">
+          <label>Ordenar</label>
+          <select id="selSort">
+            <option value="time">Hora</option>
+            <option value="league">Liga</option>
+            <option value="edge">Melhor aposta</option>
+          </select>
+        </div>
 
-      if (!jogos.length) {
-        jogosDiv.innerHTML = `<p>Sem jogos ao vivo agora. (count: ${esc(count)})</p>`;
-        return;
-      }
+        <div class="field">
+          <label>Odds (simuladas)</label>
+          <select id="selOddsMode">
+            <option value="api">Da API (se existir)</option>
+            <option value="sim">Simular odds (para testar)</option>
+          </select>
+        </div>
+      </div>
 
-      jogosDiv.innerHTML = `
-        <div style="margin-bottom:10px;opacity:.8">Jogos encontrados: <b>${esc(count)}</b></div>
-        ${jogos.map((j) => {
-          const liga = j?.league_name || "Liga";
-          const pais = j?.country?.name ? ` (${j.country.name})` : "";
-          const casa = j?.teams?.home?.name || "Casa";
-          const fora = j?.teams?.away?.name || "Fora";
-          const minuto = j?.minute ?? "-";
-          const status = j?.status || "";
-          const gc = j?.goals?.home_goals ?? "-";
-          const gf = j?.goals?.away_goals ?? "-";
-          const hora = j?.time ? ` • ${j.time}` : "";
+      <!-- LISTA -->
+      <div id="list" class="list"></div>
+    </section>
 
-          return `
-            <div style="border:1px solid #ddd;padding:10px;margin:8px 0;border-radius:10px">
-              <div style="font-weight:700">${esc(liga)}${esc(pais)}</div>
-              <div style="margin-top:4px">${esc(casa)} <b>${esc(gc)} - ${esc(gf)}</b> ${esc(fora)}</div>
-              <div style="opacity:.7;margin-top:4px">Minuto: ${esc(minuto)}${status ? " • " + esc(status) : ""}${esc(hora)}</div>
-            </div>
-          `;
-        }).join("")}
-      `;
-    }
+    <!-- DETALHE DO JOGO -->
+    <aside class="detail" id="detail">
+      <div class="detail-header">
+        <div class="detail-title" id="detailTitle">Seleciona um jogo</div>
+        <button class="btn ghost" id="btnCloseDetail">Fechar</button>
+      </div>
 
-    async function carregarAoVivo() {
-      const jogosDiv = document.getElementById("jogos");
-      jogosDiv.innerHTML = "<p>A carregar jogos ao vivo...</p>";
+      <div class="detail-body" id="detailBody">
+        <div class="hint">
+          Clica num jogo para abrir detalhes, estatísticas e prognósticos.
+        </div>
+      </div>
+    </aside>
+  </main>
 
-      try {
-        const r = await fetch(WORKER_URL, { cache: "no-store" });
-        const text = await r.text();
+  <!-- BETSLIP -->
+  <footer class="betslip">
+    <div class="betslip-left">
+      <div class="betslip-title">Boletim</div>
+      <div class="betslip-sub" id="slipCount">0 seleções</div>
+    </div>
 
-        let data;
-        try {
-          data = JSON.parse(text);
-        } catch {
-          renderErro("Resposta não é JSON (provável erro do endpoint).", text.slice(0, 800));
-          return;
-        }
+    <div class="betslip-center" id="slipItems"></div>
 
-        if (!r.ok) {
-          renderErro(`Erro HTTP ${r.status}`, JSON.stringify(data, null, 2));
-          return;
-        }
+    <div class="betslip-right">
+      <div class="stake">
+        <label>Stake (€)</label>
+        <input id="stakeInput" type="number" min="1" step="1" value="10" />
+      </div>
 
-        renderJogos(data);
-      } catch (e) {
-        renderErro("Falha a fazer fetch ao Worker.", String(e?.message || e));
-      }
-    }
+      <div class="totals">
+        <div>Total odds: <b id="totalOdds">1.00</b></div>
+        <div>Retorno (est.): <b>€<span id="estReturn">0.00</span></b></div>
+      </div>
 
-    document.addEventListener("DOMContentLoaded", () => {
-      document.getElementById("btnCarregar").addEventListener("click", carregarAoVivo);
+      <button class="btn primary" id="btnPlace">Registar aposta</button>
+    </div>
+  </footer>
 
-      // carrega logo ao abrir
-      carregarAoVivo();
-
-      // auto-refresh a cada 30s
-      setInterval(carregarAoVivo, 30000);
-    });
-  </script>
+  <script type="module" src="./js/app.js"></script>
 </body>
 </html>
