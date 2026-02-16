@@ -1,13 +1,11 @@
-// js/app.js (COMPLETO)
-// Liga o teu front-end ao Cloudflare Worker e monta UI (lista, detalhe, tabs, boletim, banca)
+// js/app.js (COMPLETO) — pronto para GitHub Pages + Cloudflare Worker
 
-const WORKER_BASE = "https://apostas-live-api.manelronaldo1.workers.dev";
+const WORKER_URL = "https://apostas-live-api.manelronaldo1.workers.dev";
 
-// Endpoints (ajusta se o teu Worker usar outros paths)
 const ENDPOINTS = {
   live: "/live",
-  pre: "/pre",          // se não existir, fica fallback
-  multis: "/multis",    // se não existir, fica fallback
+  pre: "/pre",
+  multis: "/multis",
 };
 
 const $ = (id) => document.getElementById(id);
@@ -17,8 +15,10 @@ const els = {
   detail: $("detail"),
   detailTitle: $("detailTitle"),
   detailBody: $("detailBody"),
-  btnCloseDetail: $("btnCloseDetail"),
+
   btnRefresh: $("btnRefresh"),
+  btnCloseDetail: $("btnCloseDetail"),
+
   txtFilter: $("txtFilter"),
   selSort: $("selSort"),
   selOddsMode: $("selOddsMode"),
@@ -28,434 +28,292 @@ const els = {
   stakeInput: $("stakeInput"),
   totalOdds: $("totalOdds"),
   estReturn: $("estReturn"),
-  btnPlace: $("btnPlace"),
-
   bankAmount: $("bankAmount"),
+  btnPlace: $("btnPlace"),
 };
 
 let state = {
   tab: "live",
+  raw: null,
   games: [],
-  filtered: [],
-  selectedGame: null,
-
-  slip: [], // { key, gameId, label, odd, edge, color }
-  bank: 1000,
+  selected: null,
+  slip: [],
+  bank: 1000.0,
 };
 
-// ---------- Helpers ----------
-function fmtMoney(n) {
-  return Number(n || 0).toFixed(2);
+// ---------- STORAGE ----------
+function loadBank() {
+  const v = localStorage.getItem("bank");
+  if (v) state.bank = Number(v) || 1000;
+  els.bankAmount.textContent = state.bank.toFixed(2);
+}
+function saveBank() {
+  localStorage.setItem("bank", String(state.bank));
+  els.bankAmount.textContent = state.bank.toFixed(2);
 }
 
-function safeNum(x) {
-  const n = Number(x);
-  return Number.isFinite(n) ? n : 0;
-}
-
-function normalizeText(s) {
-  return (s || "")
-    .toString()
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
-    .toLowerCase();
-}
-
-function calcTotalOdds() {
-  if (!state.slip.length) return 1;
-  return state.slip.reduce((acc, s) => acc * safeNum(s.odd || 1), 1);
-}
-
-function calcEstReturn() {
-  const stake = safeNum(els.stakeInput.value);
-  return stake * calcTotalOdds();
-}
-
-function setBank(n) {
-  state.bank = Math.max(0, safeNum(n));
-  els.bankAmount.textContent = fmtMoney(state.bank);
-}
-
-function setLoadingList(msg = "A carregar…") {
-  els.list.innerHTML = `<div class="hint">${msg}</div>`;
-}
-
-function badgeClassFromEdge(edge) {
-  // edge 0..100
-  if (edge >= 70) return "good";
-  if (edge >= 50) return "warn";
-  return "bad";
-}
-
-function edgeLabel(edge) {
-  if (edge >= 70) return "Boa";
-  if (edge >= 50) return "Média";
-  return "Fraca";
-}
-
-// ---------- Data mapping (SoccerdataAPI costuma variar) ----------
-function mapFromApi(raw) {
-  // Esperado: { count, results: [ { league_name, country:{name}, stage:{matches:[...] } } ] }
-  // Vamos "achatar" para uma lista simples de jogos.
-  const out = [];
-
-  const results = raw?.results || raw?.data || raw?.matches || [];
-  // Caso já venha como lista de jogos
-  if (Array.isArray(results) && results.length && (results[0]?.teams || results[0]?.home || results[0]?.away)) {
-    for (const m of results) out.push(mapMatch(m, null));
-    return out;
-  }
-
-  // Caso venha agrupado por ligas
-  if (Array.isArray(results)) {
-    for (const league of results) {
-      const leagueName = league?.league_name || league?.name || "Liga";
-      const countryName = league?.country?.name || league?.country_name || "";
-      const stages = league?.stage ? [league.stage] : league?.stages || [];
-      for (const st of stages) {
-        const matches = st?.matches || st?.games || [];
-        for (const m of matches) {
-          out.push(mapMatch(m, { leagueName, countryName }));
-        }
-      }
-    }
-  }
-
-  return out;
-}
-
-function mapMatch(m, leagueCtx) {
-  const id = m?.id ?? m?.match_id ?? cryptoRandomId();
-  const home = m?.teams?.home?.name || m?.home?.name || m?.home_team?.name || m?.home || "Casa";
-  const away = m?.teams?.away?.name || m?.away?.name || m?.away_team?.name || m?.away || "Fora";
-  const minute = m?.minute ?? m?.time?.minute ?? m?.status?.minute ?? "-";
-  const status = m?.status || m?.match_status || "—";
-  const date = m?.date || m?.start_date || "";
-  const time = m?.time || m?.start_time || m?.kickoff || "";
-
-  const leagueName =
-    m?.league?.name ||
-    m?.league_name ||
-    leagueCtx?.leagueName ||
-    "Liga";
-
-  const country =
-    m?.country?.name ||
-    m?.country_name ||
-    leagueCtx?.countryName ||
-    "";
-
-  const scoreHome =
-    m?.goals?.home ||
-    m?.score?.home ||
-    m?.home_score ||
-    0;
-
-  const scoreAway =
-    m?.goals?.away ||
-    m?.score?.away ||
-    m?.away_score ||
-    0;
-
-  // Odds: se existirem no payload (às vezes vem m.odds.match_winner.home etc.)
-  const apiOdds = extractOdds(m);
-
-  return {
-    id,
-    home,
-    away,
-    minute: minute === null || minute === undefined ? "-" : minute,
-    status: typeof status === "string" ? status : "—",
-    leagueName,
-    country,
-    date,
-    time,
-    scoreHome,
-    scoreAway,
-    raw: m,
-    apiOdds,
-  };
-}
-
-function extractOdds(m) {
-  // tenta encontrar algo parecido com odds no payload
-  const o = m?.odds || m?.markets || null;
-
-  // padrão do teu JSON: odds.match_winner.home etc.
-  const mw = m?.odds?.match_winner;
-  if (mw) {
-    return {
-      home: mw.home,
-      draw: mw.draw,
-      away: mw.away,
-      ou: m?.odds?.over_under,
-      handicap: m?.odds?.handicap,
-    };
-  }
-
-  // fallback: nada
-  return null;
-}
-
-function cryptoRandomId() {
-  // fallback simples
-  return Math.random().toString(36).slice(2, 10);
-}
-
-// ---------- Odds + “edge” (simulação simples) ----------
-function buildTipsForGame(g) {
-  // Isto é um “motor” simples só para ter UI a funcionar.
-  // Depois podemos trocar por lógica real usando stats/h2h/etc.
-  const minute = safeNum(g.minute);
-  const sim = (seed) => {
-    const x = Math.sin(seed) * 10000;
-    return x - Math.floor(x);
-  };
-
-  const base = sim(hashStr(g.home + g.away + g.leagueName));
-  const pressure = minute > 0 ? Math.min(1, minute / 90) : 0.4;
-
-  // 3 seleções exemplo
-  const tips = [
-    {
-      key: `${g.id}:ou25`,
-      label: "Mais de 2.5 golos",
-      odd: 1.65 + base * 0.9,
-      edge: Math.round(45 + base * 40 + pressure * 10),
-      why: "Tendência de ritmo ofensivo e linha de odds aceitável (modelo simples).",
-    },
-    {
-      key: `${g.id}:cards35`,
-      label: "Mais de 3.5 cartões",
-      odd: 1.55 + (1 - base) * 0.9,
-      edge: Math.round(40 + (1 - base) * 45),
-      why: "Equipas com probabilidade maior de faltas/cartões (modelo simples).",
-    },
-    {
-      key: `${g.id}:corners85`,
-      label: "Mais de 8.5 cantos",
-      odd: 1.60 + sim(hashStr(g.away + g.home)) * 0.9,
-      edge: Math.round(42 + sim(hashStr(g.leagueName)) * 45),
-      why: "Padrão de ataques laterais e pressão (modelo simples).",
-    },
-  ];
-
-  // ordenar por edge desc
-  tips.sort((a, b) => b.edge - a.edge);
-
-  // pintar “cor” como pediste (azul/verde/amarelo/vermelho)
-  for (const t of tips) {
-    if (t.edge >= 70) t.color = "good";      // verde
-    else if (t.edge >= 55) t.color = "warn"; // amarelo
-    else t.color = "bad";                    // vermelho
-  }
-
-  // “azul” podes usar para “neutro” se quiseres mais tarde
-  return tips;
-}
-
-function hashStr(s) {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
-  return Math.abs(h);
-}
-
-function getOddsMode() {
-  return els.selOddsMode?.value || "api";
-}
-
-function getSortMode() {
-  return els.selSort?.value || "time";
-}
-
-// ---------- Fetch ----------
-async function fetchJson(url) {
-  const res = await fetch(url, { headers: { "accept": "application/json" } });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return await res.json();
-}
-
-async function loadTab(tab) {
-  state.tab = tab;
-  setLoadingList("A carregar…");
-
-  // definir endpoint
-  let path = ENDPOINTS[tab] || ENDPOINTS.live;
-  let url = `${WORKER_BASE}${path}`;
-
-  let raw;
+function loadSlip() {
   try {
-    raw = await fetchJson(url);
+    const v = localStorage.getItem("slip");
+    if (v) state.slip = JSON.parse(v) || [];
+  } catch {
+    state.slip = [];
+  }
+}
+function saveSlip() {
+  localStorage.setItem("slip", JSON.stringify(state.slip));
+}
+
+// ---------- API PARSING (AQUI ESTÁ A CORREÇÃO) ----------
+function extractMatches(data) {
+  // Worker devolve: { count, results:[ {league_name,country:{name}, stage:[{stage_name,matches:[...] }]} ] }
+  try {
+    const leagues = Array.isArray(data?.results) ? data.results : [];
+    const matches = leagues
+      .flatMap((l) => {
+        const stages = Array.isArray(l?.stage) ? l.stage : [];
+        return stages.flatMap((s) => {
+          const ms = Array.isArray(s?.matches) ? s.matches : [];
+          return ms.map((m) => ({
+            ...m,
+            _league_name: l?.league_name ?? "",
+            _country: l?.country?.name ?? "",
+            _stage_name: s?.stage_name ?? "",
+            _league_id: l?.league_id ?? null,
+          }));
+        });
+      })
+      .filter(Boolean);
+
+    return matches;
   } catch (e) {
-    // fallback: se o endpoint não existir, tenta raiz
-    try {
-      raw = await fetchJson(`${WORKER_BASE}/`);
-    } catch (e2) {
-      els.list.innerHTML = `<div class="hint">Erro a obter dados do Worker. Confirma URL/endpoint.<br><br><b>${String(e2.message || e2)}</b></div>`;
-      return;
+    console.error("Erro a extrair matches:", e);
+    return [];
+  }
+}
+
+// ---------- HELPERS ----------
+function norm(s) {
+  return String(s ?? "").toLowerCase().trim();
+}
+
+function gameTitle(g) {
+  const home = g?.teams?.home?.name ?? "Casa";
+  const away = g?.teams?.away?.name ?? "Fora";
+  return `${home} vs ${away}`;
+}
+
+function gameLeagueLine(g) {
+  const league = g?._stage_name || g?._league_name || "Liga";
+  const country = g?._country ? ` (${g._country})` : "";
+  return `${league}${country}`;
+}
+
+function gameTimeLine(g) {
+  const date = g?.date ?? "";
+  const time = g?.time ?? "";
+  const minute = g?.minute ?? "-";
+  const status = g?.status ?? "";
+  return `Data/Hora: ${date} ${time} • Min: ${minute} • ${status}`;
+}
+
+function getMarketOdds(g, mode) {
+  // Se o Worker trouxer odds em g.odds.match_winner / over_under etc, tentamos usar.
+  // Se não, simulamos odds para testar a app.
+  if (mode === "api") {
+    const mw = g?.odds?.match_winner;
+    if (mw && (mw.home || mw.draw || mw.away)) {
+      return {
+        label: "1X2",
+        home: mw.home ?? null,
+        draw: mw.draw ?? null,
+        away: mw.away ?? null,
+      };
     }
   }
 
-  const games = mapFromApi(raw);
+  // Simulação (leve e realista)
+  const seed = (g?.id ?? 0) + (g?._league_id ?? 0);
+  const r = (x) => {
+    const t = Math.sin(seed * 999 + x) * 10000;
+    return t - Math.floor(t);
+  };
+  const home = (1.6 + r(1) * 1.6).toFixed(2);
+  const draw = (2.8 + r(2) * 1.8).toFixed(2);
+  const away = (1.6 + r(3) * 1.6).toFixed(2);
 
-  // Se o /pre ou /multis não existir, ainda assim mostra algo
-  state.games = games;
-  applyFilterAndRender();
+  return { label: "1X2 (sim)", home, draw, away };
 }
 
-// ---------- Render ----------
-function applyFilterAndRender() {
-  const q = normalizeText(els.txtFilter?.value || "");
+function edgeBadge(score) {
+  // score 0..100 -> cor
+  if (score >= 75) return { cls: "good", txt: "Boa" };
+  if (score >= 55) return { cls: "warn", txt: "Média" };
+  return { cls: "bad", txt: "Fraca" };
+}
+
+function computeEdge(g) {
+  // Heurística simples para já (depois refinamos com estatísticas reais)
+  // Se estiver ao vivo e minuto alto, aumenta um pouco
+  const m = Number(g?.minute);
+  const base = 40 + (((g?.id ?? 0) % 60) * 0.6); // 40..76
+  const liveBoost = Number.isFinite(m) && m > 0 ? Math.min(18, m * 0.25) : 0;
+  return Math.max(0, Math.min(100, Math.round(base + liveBoost)));
+}
+
+// ---------- RENDER ----------
+function renderList() {
+  const q = norm(els.txtFilter.value);
+
   let items = [...state.games];
 
   // filtro
   if (q) {
     items = items.filter((g) => {
-      const hay = normalizeText(`${g.leagueName} ${g.country} ${g.home} ${g.away}`);
-      return hay.includes(q);
+      const a = norm(gameTitle(g));
+      const b = norm(gameLeagueLine(g));
+      return a.includes(q) || b.includes(q);
     });
   }
 
   // ordenar
-  const sortMode = getSortMode();
-  if (sortMode === "league") {
-    items.sort((a, b) => (a.leagueName || "").localeCompare(b.leagueName || ""));
-  } else if (sortMode === "edge") {
-    items.sort((a, b) => {
-      const ea = buildTipsForGame(a)[0]?.edge || 0;
-      const eb = buildTipsForGame(b)[0]?.edge || 0;
-      return eb - ea;
-    });
+  const sort = els.selSort.value;
+  if (sort === "league") {
+    items.sort((a, b) => norm(gameLeagueLine(a)).localeCompare(norm(gameLeagueLine(b))));
+  } else if (sort === "edge") {
+    items.sort((a, b) => computeEdge(b) - computeEdge(a));
   } else {
-    // time: tenta ordenar por hora/tempo
-    items.sort((a, b) => String(a.time || "").localeCompare(String(b.time || "")));
+    // time: usa date+time se existir
+    items.sort((a, b) => {
+      const A = `${a?.date ?? ""} ${a?.time ?? ""}`;
+      const B = `${b?.date ?? ""} ${b?.time ?? ""}`;
+      return A.localeCompare(B);
+    });
   }
 
-  state.filtered = items;
-  renderList();
-}
-
-function renderList() {
-  if (!state.filtered.length) {
-    els.list.innerHTML = `<div class="hint">Sem jogos para mostrar (filtro/endpoint).</div>`;
+  if (!items.length) {
+    els.list.innerHTML = `<div class="hint">Sem jogos para mostrar. (Confirma o filtro ou o endpoint)</div>`;
     return;
   }
 
-  const oddsMode = getOddsMode();
-
-  els.list.innerHTML = state.filtered
+  els.list.innerHTML = items
     .map((g) => {
-      const bestTip = buildTipsForGame(g)[0];
-      const badge = badgeClassFromEdge(bestTip.edge);
-
-      // “odd base” (se tiver da API, usa a casa como exemplo; senão simula)
-      let oddPreview = bestTip.odd;
-      if (oddsMode === "api" && g.apiOdds?.home) oddPreview = g.apiOdds.home;
+      const edge = computeEdge(g);
+      const badge = edgeBadge(edge);
+      const odds = getMarketOdds(g, els.selOddsMode.value);
 
       return `
-      <div class="card" data-game="${g.id}">
-        <div class="row">
-          <div>
-            <div class="league">${escapeHtml(g.leagueName)} ${g.country ? `<span class="meta">(${escapeHtml(g.country)})</span>` : ""}</div>
-            <div class="teams">${escapeHtml(g.home)} <span class="meta">vs</span> ${escapeHtml(g.away)}</div>
-            <div class="meta">Minuto: ${escapeHtml(String(g.minute))} • ${escapeHtml(String(g.status || ""))}</div>
+        <div class="card" data-id="${g.id}">
+          <div class="row">
+            <div class="league">${escapeHtml(gameLeagueLine(g))}</div>
+            <div class="badge badge-${badge.cls}">${badge.txt} • ${edge}%</div>
           </div>
-          <div style="text-align:right">
-            <div class="badge badge-${badge}">${edgeLabel(bestTip.edge)} • ${bestTip.edge}%</div>
-            <div class="meta" style="margin-top:6px">Odd ~ <b>${safeNum(oddPreview).toFixed(2)}</b></div>
+
+          <div class="teams">${escapeHtml(gameTitle(g))}</div>
+          <div class="meta">${escapeHtml(gameTimeLine(g))}</div>
+
+          <div class="row" style="margin-top:10px; gap:8px; flex-wrap:wrap;">
+            <button class="btn pick" data-pick="HOME" data-odd="${odds.home}">Casa ${odds.home ?? "-"}</button>
+            <button class="btn pick" data-pick="DRAW" data-odd="${odds.draw}">Empate ${odds.draw ?? "-"}</button>
+            <button class="btn pick" data-pick="AWAY" data-odd="${odds.away}">Fora ${odds.away ?? "-"}</button>
           </div>
         </div>
-      </div>`;
+      `;
     })
     .join("");
 
-  // click handlers
-  document.querySelectorAll("[data-game]").forEach((el) => {
-    el.addEventListener("click", () => {
-      const id = el.getAttribute("data-game");
-      const g = state.filtered.find((x) => String(x.id) === String(id));
+  // clicar no card abre detalhe
+  els.list.querySelectorAll(".card").forEach((card) => {
+    card.addEventListener("click", (e) => {
+      // se clicou num botão pick, não abrir detalhe automaticamente (mas pode abrir se quiseres)
+      if (e.target?.classList?.contains("pick")) return;
+
+      const id = card.getAttribute("data-id");
+      const g = state.games.find((x) => String(x.id) === String(id));
       if (g) openDetail(g);
+    });
+  });
+
+  // picks
+  els.list.querySelectorAll(".pick").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const card = btn.closest(".card");
+      const id = card.getAttribute("data-id");
+      const g = state.games.find((x) => String(x.id) === String(id));
+      if (!g) return;
+
+      const pick = btn.getAttribute("data-pick");
+      const odd = Number(btn.getAttribute("data-odd"));
+      if (!odd || !Number.isFinite(odd)) return;
+
+      addToSlip(g, pick, odd);
     });
   });
 }
 
 function openDetail(g) {
-  state.selectedGame = g;
-  els.detailTitle.textContent = `${g.home} vs ${g.away}`;
-  const tips = buildTipsForGame(g);
+  state.selected = g;
 
+  const edge = computeEdge(g);
+  const badge = edgeBadge(edge);
+
+  els.detailTitle.textContent = gameTitle(g);
+
+  // mostra um resumo + JSON do jogo (para debug)
   els.detailBody.innerHTML = `
-    <div class="meta">${escapeHtml(g.leagueName)} ${g.country ? `(${escapeHtml(g.country)})` : ""} • Minuto: ${escapeHtml(String(g.minute))}</div>
-
-    <div style="height:10px"></div>
-
-    <div class="hint">
-      Prognósticos (modelo simples por agora). Depois ligamos a <b>stats / h2h</b> para “explicar o porquê” com dados reais.
+    <div class="row" style="margin-bottom:10px;">
+      <div class="league">${escapeHtml(gameLeagueLine(g))}</div>
+      <div class="badge badge-${badge.cls}">${badge.txt} • ${edge}%</div>
     </div>
 
-    <div style="height:12px"></div>
+    <div class="meta">${escapeHtml(gameTimeLine(g))}</div>
 
-    ${tips
-      .map((t) => {
-        const badge = t.color; // good/warn/bad
-        return `
-        <div class="card" style="cursor:default">
-          <div class="row">
-            <div>
-              <div style="font-weight:900">${escapeHtml(t.label)}</div>
-              <div class="meta">${escapeHtml(t.why)}</div>
-            </div>
-            <div style="text-align:right">
-              <div class="badge badge-${badge}">${edgeLabel(t.edge)} • ${t.edge}%</div>
-              <div class="meta" style="margin-top:6px">Odd: <b>${safeNum(t.odd).toFixed(2)}</b></div>
-              <div style="height:8px"></div>
-              <button class="btn primary" data-add="${escapeHtml(t.key)}">Adicionar</button>
-            </div>
-          </div>
-        </div>`;
-      })
-      .join("")}
+    <div style="margin-top:12px;">
+      <div class="hint">
+        (Próximo passo) Aqui vamos meter: cantos, remates, amarelos, 1ª parte/2ª parte, 90min e o “porquê” do prognóstico.
+      </div>
+    </div>
+
+    <details style="margin-top:12px;">
+      <summary style="cursor:pointer;">Ver dados do jogo (debug)</summary>
+      <pre style="white-space:pre-wrap;word-break:break-word;">${escapeHtml(JSON.stringify(g, null, 2))}</pre>
+    </details>
   `;
 
-  // add buttons
-  els.detailBody.querySelectorAll("[data-add]").forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const key = btn.getAttribute("data-add");
-      const tip = tips.find((x) => x.key === key);
-      if (tip) addToSlip(g, tip);
-    });
-  });
+  // garante que a sidebar aparece
+  els.detail.style.display = "";
 }
 
 function closeDetail() {
-  state.selectedGame = null;
+  state.selected = null;
   els.detailTitle.textContent = "Seleciona um jogo";
   els.detailBody.innerHTML = `<div class="hint">Clica num jogo para abrir detalhes, estatísticas e prognósticos.</div>`;
 }
 
-// ---------- Bet slip ----------
-function addToSlip(game, tip) {
-  // não duplicar
-  if (state.slip.some((s) => s.key === tip.key)) {
-    renderSlip();
-    return;
-  }
+// ---------- BETSLIP ----------
+function addToSlip(g, pick, odd) {
+  const key = `${g.id}-${pick}`;
+  const exists = state.slip.find((x) => x.key === key);
+  if (exists) return;
 
-  state.slip.push({
-    key: tip.key,
-    gameId: game.id,
-    label: `${game.home} vs ${game.away} — ${tip.label}`,
-    odd: safeNum(tip.odd).toFixed(2),
-    edge: tip.edge,
-    color: tip.color,
-  });
+  const item = {
+    key,
+    gameId: g.id,
+    title: gameTitle(g),
+    league: gameLeagueLine(g),
+    pick,
+    odd,
+  };
 
+  state.slip.push(item);
+  saveSlip();
   renderSlip();
 }
 
 function removeFromSlip(key) {
-  state.slip = state.slip.filter((s) => s.key !== key);
+  state.slip = state.slip.filter((x) => x.key !== key);
+  saveSlip();
   renderSlip();
 }
 
@@ -463,76 +321,78 @@ function renderSlip() {
   els.slipCount.textContent = `${state.slip.length} seleções`;
 
   if (!state.slip.length) {
-    els.slipItems.innerHTML = `<div class="meta">Sem seleções</div>`;
-  } else {
-    els.slipItems.innerHTML = state.slip
-      .map(
-        (s) => `
-        <div class="pill" style="display:flex;align-items:center;gap:10px">
-          <span class="badge badge-${s.color}">${s.edge}%</span>
-          <span style="max-width:420px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(s.label)}</span>
-          <b>${safeNum(s.odd).toFixed(2)}</b>
-          <button class="btn ghost" data-remove="${escapeHtml(s.key)}">✕</button>
-        </div>`
-      )
-      .join("");
-
-    els.slipItems.querySelectorAll("[data-remove]").forEach((btn) => {
-      btn.addEventListener("click", () => removeFromSlip(btn.getAttribute("data-remove")));
-    });
+    els.slipItems.innerHTML = `<div class="hint">Sem seleções</div>`;
+    els.totalOdds.textContent = "1.00";
+    els.estReturn.textContent = "0.00";
+    return;
   }
 
-  const total = calcTotalOdds();
-  els.totalOdds.textContent = total.toFixed(2);
+  els.slipItems.innerHTML = state.slip
+    .map((x) => {
+      return `
+        <div class="slip-item" style="display:flex;gap:10px;align-items:center;">
+          <div style="min-width:220px;">
+            <div style="font-weight:800;">${escapeHtml(x.title)}</div>
+            <div class="meta">${escapeHtml(x.pick)} • Odd ${x.odd.toFixed(2)}</div>
+          </div>
+          <button class="btn ghost" data-remove="${x.key}">X</button>
+        </div>
+      `;
+    })
+    .join("");
 
-  const est = calcEstReturn();
-  els.estReturn.textContent = fmtMoney(est);
+  els.slipItems.querySelectorAll("[data-remove]").forEach((b) => {
+    b.addEventListener("click", () => removeFromSlip(b.getAttribute("data-remove")));
+  });
+
+  const totalOdds = state.slip.reduce((acc, x) => acc * Number(x.odd), 1);
+  els.totalOdds.textContent = totalOdds.toFixed(2);
+
+  const stake = Number(els.stakeInput.value) || 0;
+  els.estReturn.textContent = (stake * totalOdds).toFixed(2);
 }
 
-function placeBet() {
-  const stake = safeNum(els.stakeInput.value);
-  if (!state.slip.length) return alert("Adiciona pelo menos 1 seleção.");
-  if (stake <= 0) return alert("Stake inválida.");
-  if (stake > state.bank) return alert("Stake maior que a banca.");
+// ---------- LOAD DATA ----------
+async function fetchTab(tab) {
+  const path = ENDPOINTS[tab] || ENDPOINTS.live;
+  const url = `${WORKER_URL}${path}`;
 
-  // Subtrai banca e limpa boletim (registo simples)
-  setBank(state.bank - stake);
-  alert(`Aposta registada! Stake €${fmtMoney(stake)} | Odds ${calcTotalOdds().toFixed(2)} | Retorno est. €${fmtMoney(calcEstReturn())}`);
-
-  state.slip = [];
-  renderSlip();
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) throw new Error(`Erro HTTP ${res.status}`);
+  const data = await res.json();
+  return data;
 }
 
-// ---------- Tabs ----------
-function initTabs() {
+async function refresh() {
+  els.list.innerHTML = `<div class="hint">A carregar...</div>`;
+  closeDetail();
+
+  try {
+    const data = await fetchTab(state.tab);
+    state.raw = data;
+    state.games = extractMatches(data);
+
+    renderList();
+  } catch (e) {
+    console.error(e);
+    els.list.innerHTML = `<div class="hint">Erro a carregar jogos. Confirma o Worker e o endpoint (${state.tab}).</div>`;
+  }
+}
+
+// ---------- TABS ----------
+function setTab(tab) {
+  state.tab = tab;
+
   document.querySelectorAll(".tab").forEach((t) => {
-    t.addEventListener("click", () => {
-      document.querySelectorAll(".tab").forEach((x) => x.classList.remove("active"));
-      t.classList.add("active");
-      const tab = t.getAttribute("data-tab");
-      closeDetail();
-      loadTab(tab);
-    });
+    t.classList.toggle("active", t.getAttribute("data-tab") === tab);
   });
+
+  refresh();
 }
 
-// ---------- Events ----------
-function initEvents() {
-  els.btnCloseDetail.addEventListener("click", closeDetail);
-  els.btnRefresh.addEventListener("click", () => loadTab(state.tab));
-  els.txtFilter.addEventListener("input", applyFilterAndRender);
-  els.selSort.addEventListener("change", applyFilterAndRender);
-  els.selOddsMode.addEventListener("change", applyFilterAndRender);
-  els.stakeInput.addEventListener("input", () => {
-    els.estReturn.textContent = fmtMoney(calcEstReturn());
-  });
-  els.btnPlace.addEventListener("click", placeBet);
-}
-
-// ---------- Security: escape HTML ----------
+// ---------- HTML SAFE ----------
 function escapeHtml(str) {
-  return (str ?? "")
-    .toString()
+  return String(str ?? "")
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
@@ -540,13 +400,43 @@ function escapeHtml(str) {
     .replaceAll("'", "&#039;");
 }
 
-// ---------- Boot ----------
-function boot() {
-  setBank(1000);
-  initTabs();
-  initEvents();
-  renderSlip();
-  loadTab("live");
+// ---------- INIT ----------
+function bindEvents() {
+  // tabs
+  document.querySelectorAll(".tab").forEach((t) => {
+    t.addEventListener("click", () => setTab(t.getAttribute("data-tab")));
+  });
+
+  els.btnRefresh.addEventListener("click", refresh);
+  els.btnCloseDetail.addEventListener("click", closeDetail);
+
+  els.txtFilter.addEventListener("input", renderList);
+  els.selSort.addEventListener("change", renderList);
+  els.selOddsMode.addEventListener("change", renderList);
+
+  els.stakeInput.addEventListener("input", renderSlip);
+
+  els.btnPlace.addEventListener("click", () => {
+    const stake = Number(els.stakeInput.value) || 0;
+    if (!state.slip.length) return alert("Seleciona pelo menos 1 aposta.");
+    if (stake <= 0) return alert("Stake inválida.");
+    if (stake > state.bank) return alert("Banca insuficiente.");
+
+    // tira da banca
+    state.bank -= stake;
+    saveBank();
+
+    // limpa slip
+    state.slip = [];
+    saveSlip();
+    renderSlip();
+
+    alert("Aposta registada ✅ (modo demo)");
+  });
 }
 
-boot();
+loadBank();
+loadSlip();
+bindEvents();
+renderSlip();
+setTab("live");
