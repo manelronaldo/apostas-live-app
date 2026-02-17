@@ -1,121 +1,116 @@
-const WORKER_URL = "https://apostas-live-api.manelronaldo1.workers.dev";
+// ===============================
+// APOSTAS LIVE APP - APP.JS FINAL
+// ===============================
 
-const list = document.getElementById("list");
+// 🔥 URL do teu Worker (API)
+const API_BASE = "https://apostas-live-api.manelronaldo1.workers.dev";
 
-async function loadGames(){
+// 🔐 password definida no Cloudflare
+const APP_PASSWORD = "APOSTAS2026";
 
-  list.innerHTML = "<div class='hint'>A carregar jogos...</div>";
 
-  try{
+// ===============================
+// ELEMENTOS
+// ===============================
+const els = {
+  list: document.getElementById("list"),
+  detail: document.getElementById("detail"),
+  detailTitle: document.getElementById("detailTitle"),
+  detailBody: document.getElementById("detailBody"),
+};
 
-    const res = await fetch(WORKER_URL + "/live");
-    const data = await res.json();
 
-    if(!data || !data.results){
-      list.innerHTML = "Sem dados da API.";
-      return;
+// ===============================
+// FETCH BASE (com password)
+// ===============================
+async function apiFetch(path) {
+  const res = await fetch(API_BASE + path, {
+    headers: {
+      "x-app-password": APP_PASSWORD
     }
+  });
 
-    // 🔥 SISTEMA LIVE INTELIGENTE
-    const games = data.results.filter(g => {
+  if (!res.ok) throw new Error("API error");
 
-      if(!g) return false;
-
-      // jogos realmente live
-      if(String(g.status).toLowerCase().includes("live")) return true;
-
-      // jogos que começam em breve
-      if(g.status === "pre-match"){
-
-        try{
-
-          const now = new Date();
-          const gameDate = new Date(g.date + " " + g.time);
-
-          const diffMin = (gameDate - now) / 60000;
-
-          // até 60 minutos antes mostra como LIVE
-          if(diffMin <= 60 && diffMin >= -5){
-            return true;
-          }
-
-        }catch(e){}
-      }
-
-      // fallback se tiver minuto >=0
-      if(g.minute !== undefined && g.minute >= 0){
-        return true;
-      }
-
-      return false;
-
-    });
-
-    if(!games.length){
-
-      list.innerHTML = `
-        <div class="card">
-          <div class="league">Sem jogos ao vivo agora</div>
-          <div class="meta">
-            A API só está a devolver pré-jogo neste momento.
-          </div>
-        </div>
-      `;
-      return;
-    }
-
-    renderGames(games);
-
-  }catch(err){
-
-    console.log(err);
-    list.innerHTML = "Erro ao carregar jogos.";
-
-  }
-
+  return await res.json();
 }
 
-function renderGames(games){
 
-  list.innerHTML = games.map(g => {
+// ===============================
+// CARREGAR JOGOS AO VIVO
+// ===============================
+async function loadGames() {
+  if (!els.list) return;
 
-    const home = g.teams?.home?.name || "Casa";
-    const away = g.teams?.away?.name || "Fora";
-    const league = g.league_name || "Liga";
+  els.list.innerHTML = "A carregar jogos...";
 
-    const odds = g.odds?.match_winner || {
-      home: (1.6 + Math.random()).toFixed(2),
-      draw: (2.8 + Math.random()).toFixed(2),
-      away: (2.0 + Math.random()).toFixed(2)
-    };
+  try {
+    const data = await apiFetch("/live");
 
-    return `
-      <div class="card">
-        <div class="row">
-          <div class="league">${league}</div>
-          <span class="badge blue">${g.status}</span>
-        </div>
+    if (!data || !data.results || !data.results.length) {
+      els.list.innerHTML = "Sem jogos ao vivo neste momento.";
+      return;
+    }
 
-        <div class="teams">${home} vs ${away}</div>
+    renderGames(data.results);
 
-        <div class="meta">
-          ${g.date} ${g.time} • Min: ${g.minute}
-        </div>
+  } catch (err) {
+    console.error(err);
+    els.list.innerHTML = "Erro ao carregar jogos.";
+  }
+}
 
-        <div class="oddsRow">
-          <div class="oddBtn">Casa <b>${odds.home}</b></div>
-          <div class="oddBtn">Empate <b>${odds.draw}</b></div>
-          <div class="oddBtn">Fora <b>${odds.away}</b></div>
-        </div>
-      </div>
+
+// ===============================
+// RENDER JOGOS
+// ===============================
+function renderGames(matches) {
+  els.list.innerHTML = "";
+
+  matches.forEach(match => {
+
+    const div = document.createElement("div");
+    div.className = "card";
+
+    const home = match.teams?.home?.name || "Home";
+    const away = match.teams?.away?.name || "Away";
+    const league = match.league_name || "";
+    const time = match.time || "";
+
+    div.innerHTML = `
+      <h3>${home} vs ${away}</h3>
+      <p>${league} • ${time}</p>
     `;
 
-  }).join("");
+    div.onclick = () => openDetail(match);
 
+    els.list.appendChild(div);
+  });
 }
 
-// carregar logo ao abrir
-loadGames();
 
-// auto refresh a cada 40s
-setInterval(loadGames,40000);
+// ===============================
+// DETALHE DO JOGO
+// ===============================
+function openDetail(match) {
+  if (!els.detailTitle || !els.detailBody) return;
+
+  const home = match.teams?.home?.name || "";
+  const away = match.teams?.away?.name || "";
+
+  els.detailTitle.innerText = `${home} vs ${away}`;
+
+  els.detailBody.innerHTML = `
+    <p>Liga: ${match.league_name || "-"}</p>
+    <p>Estado: ${match.status || "-"}</p>
+    <p>Minuto: ${match.minute || "-"}</p>
+  `;
+}
+
+
+// ===============================
+// INICIAR APP
+// ===============================
+document.addEventListener("DOMContentLoaded", () => {
+  loadGames();
+});
