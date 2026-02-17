@@ -1,83 +1,56 @@
-// ================================
-// CONFIG
-// ================================
-const API_BASE = "https://apostas-live-api.manelronaldo1.workers.dev";
+const API_URL = "https://apostas-live-api.manelronaldo1.workers.dev/live";
 
-// ================================
-// FETCH SIMPLES (SEM PASSWORD)
-// ================================
-async function apiFetch(path) {
-  const res = await fetch(`${API_BASE}${path}`);
+async function loadGames(){
 
-  if (!res.ok) {
-    throw new Error("Erro HTTP: " + res.status);
-  }
+    const container = document.getElementById("games-list");
 
-  return res.json();
-}
-
-// ================================
-// RENDER DOS JOGOS
-// ================================
-function renderGames(data) {
-  const container = document.querySelector("#games-list");
-
-  if (!container) return;
-
-  container.innerHTML = "";
-
-  if (!data || !data.results || !data.results.length) {
-    container.innerHTML = `<div>Sem jogos disponíveis.</div>`;
-    return;
-  }
-
-  data.results.forEach(league => {
-    league.stage.forEach(stage => {
-      stage.matches.forEach(match => {
-
-        const el = document.createElement("div");
-        el.className = "game-item";
-
-        el.innerHTML = `
-          <div class="game">
-            <strong>${match.teams.home.name}</strong>
-            vs
-            <strong>${match.teams.away.name}</strong>
-            <br>
-            <small>${league.league_name} • ${match.time}</small>
-          </div>
-        `;
-
-        container.appendChild(el);
-      });
-    });
-  });
-}
-
-// ================================
-// LOAD GAMES
-// ================================
-async function loadGames() {
-  const container = document.querySelector("#games-list");
-
-  try {
     container.innerHTML = "A carregar jogos...";
 
-    const data = await apiFetch("/live");
+    try{
 
-    console.log("DATA:", data);
+        const res = await fetch(API_URL);
 
-    renderGames(data);
+        const data = await res.json();
 
-  } catch (err) {
-    console.error(err);
-    container.innerHTML = "Erro ao carregar jogos.";
-  }
+        console.log("API:", data);
+
+        if(!data.results || data.results.length === 0){
+            container.innerHTML = "Sem jogos disponíveis.";
+            return;
+        }
+
+        container.innerHTML = "";
+
+        data.results.forEach(league => {
+
+            league.stage.forEach(stage => {
+
+                stage.matches.forEach(match => {
+
+                    const div = document.createElement("div");
+                    div.className = "game";
+
+                    div.innerHTML = `
+                        <b>${match.teams.home.name}</b> vs 
+                        <b>${match.teams.away.name}</b><br>
+                        Liga: ${league.league_name}<br>
+                        Hora: ${match.time}
+                    `;
+
+                    container.appendChild(div);
+
+                });
+
+            });
+
+        });
+
+    }catch(err){
+
+        console.error(err);
+        container.innerHTML = "Erro ao carregar jogos.";
+
+    }
 }
 
-// ================================
-// START
-// ================================
-document.addEventListener("DOMContentLoaded", () => {
-  loadGames();
-});
+loadGames();
