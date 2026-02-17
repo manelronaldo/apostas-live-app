@@ -1,53 +1,56 @@
-const API_URL = "https://apostas-live-api.manelronaldo1.workers.dev";
+const API_URL = "https://apostas-live-api-manelronaldo1.workers.dev/live";
 
 async function loadGames(){
 
-    const container = document.getElementById("games-list");
+  const container = document.getElementById("games");
+  container.innerHTML = "A carregar jogos...";
 
-    if(!container){
-        console.log("DIV games-list não existe");
-        return;
+  try{
+
+    const res = await fetch(API_URL);
+    const data = await res.json();
+
+    console.log("API:", data);
+
+    container.innerHTML = "";
+
+    if(!data.results || data.results.length === 0){
+      container.innerHTML = "Sem jogos disponíveis.";
+      return;
     }
 
-    container.innerHTML = "A carregar jogos...";
+    data.results.forEach(league => {
 
-    try{
+      if(!league.stage) return;
 
-        const res = await fetch(API_URL);
-        const data = await res.json();
+      league.stage.forEach(stage => {
 
-        console.log("API:", data);
+        if(!stage.matches) return;
 
-        container.innerHTML = "";
+        stage.matches.forEach(match => {
 
-        function render(matches){
-            if(!matches) return;
+          const div = document.createElement("div");
+          div.className = "game";
 
-            matches.forEach(m => {
+          div.innerHTML = `
+            <b>${match.teams.home.name} vs ${match.teams.away.name}</b><br>
+            Liga: ${league.league_name}<br>
+            Hora: ${match.time}<br>
+            País: ${league.country.name}
+          `;
 
-                const div = document.createElement("div");
-                div.style.margin = "10px";
-                div.style.padding = "10px";
-                div.style.background = "#0f1b2b";
-                div.style.borderRadius = "8px";
+          container.appendChild(div);
 
-                div.innerHTML = `
-                <b>${m.teams.home.name}</b> vs 
-                <b>${m.teams.away.name}</b><br>
-                ${m.league?.name || ""}
-                `;
+        });
 
-                container.appendChild(div);
-            });
-        }
+      });
 
-        render(data.live);
-        render(data.today);
+    });
 
-    }catch(e){
-        container.innerHTML = "Erro ao carregar jogos";
-        console.log(e);
-    }
+  }catch(err){
+    console.error(err);
+    container.innerHTML = "Erro ao carregar jogos.";
+  }
 }
 
 loadGames();
