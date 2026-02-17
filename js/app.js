@@ -1,4 +1,4 @@
-const API_URL = "https://apostas-live-api-manelronaldo1.workers.dev/live";
+const API_URL = "https://apostas-live-api.manelronaldo1.workers.dev/";
 
 async function loadGames(){
 
@@ -7,7 +7,7 @@ async function loadGames(){
 
   try{
 
-    const res = await fetch(API_URL);
+    const res = await fetch(https://apostas-live-api.manelronaldo1.workers.dev/);
     const data = await res.json();
 
     console.log("API:", data);
