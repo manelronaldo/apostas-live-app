@@ -1,116 +1,83 @@
-// ===============================
-// APOSTAS LIVE APP - APP.JS FINAL
-// ===============================
-
-// 🔥 URL do teu Worker (API)
+// ================================
+// CONFIG
+// ================================
 const API_BASE = "https://apostas-live-api.manelronaldo1.workers.dev";
 
-// 🔐 password definida no Cloudflare
-const APP_PASSWORD = "APOSTAS2026";
-
-
-// ===============================
-// ELEMENTOS
-// ===============================
-const els = {
-  list: document.getElementById("list"),
-  detail: document.getElementById("detail"),
-  detailTitle: document.getElementById("detailTitle"),
-  detailBody: document.getElementById("detailBody"),
-};
-
-
-// ===============================
-// FETCH BASE (com password)
-// ===============================
+// ================================
+// FETCH SIMPLES (SEM PASSWORD)
+// ================================
 async function apiFetch(path) {
-  const res = await fetch(API_BASE + path, {
-    headers: {
-      "x-app-password": APP_PASSWORD
-    }
-  });
+  const res = await fetch(`${API_BASE}${path}`);
 
-  if (!res.ok) throw new Error("API error");
+  if (!res.ok) {
+    throw new Error("Erro HTTP: " + res.status);
+  }
 
-  return await res.json();
+  return res.json();
 }
 
+// ================================
+// RENDER DOS JOGOS
+// ================================
+function renderGames(data) {
+  const container = document.querySelector("#games-list");
 
-// ===============================
-// CARREGAR JOGOS AO VIVO
-// ===============================
+  if (!container) return;
+
+  container.innerHTML = "";
+
+  if (!data || !data.results || !data.results.length) {
+    container.innerHTML = `<div>Sem jogos disponíveis.</div>`;
+    return;
+  }
+
+  data.results.forEach(league => {
+    league.stage.forEach(stage => {
+      stage.matches.forEach(match => {
+
+        const el = document.createElement("div");
+        el.className = "game-item";
+
+        el.innerHTML = `
+          <div class="game">
+            <strong>${match.teams.home.name}</strong>
+            vs
+            <strong>${match.teams.away.name}</strong>
+            <br>
+            <small>${league.league_name} • ${match.time}</small>
+          </div>
+        `;
+
+        container.appendChild(el);
+      });
+    });
+  });
+}
+
+// ================================
+// LOAD GAMES
+// ================================
 async function loadGames() {
-  if (!els.list) return;
-
-  els.list.innerHTML = "A carregar jogos...";
+  const container = document.querySelector("#games-list");
 
   try {
+    container.innerHTML = "A carregar jogos...";
+
     const data = await apiFetch("/live");
 
-    if (!data || !data.results || !data.results.length) {
-      els.list.innerHTML = "Sem jogos ao vivo neste momento.";
-      return;
-    }
+    console.log("DATA:", data);
 
-    renderGames(data.results);
+    renderGames(data);
 
   } catch (err) {
     console.error(err);
-    els.list.innerHTML = "Erro ao carregar jogos.";
+    container.innerHTML = "Erro ao carregar jogos.";
   }
 }
 
-
-// ===============================
-// RENDER JOGOS
-// ===============================
-function renderGames(matches) {
-  els.list.innerHTML = "";
-
-  matches.forEach(match => {
-
-    const div = document.createElement("div");
-    div.className = "card";
-
-    const home = match.teams?.home?.name || "Home";
-    const away = match.teams?.away?.name || "Away";
-    const league = match.league_name || "";
-    const time = match.time || "";
-
-    div.innerHTML = `
-      <h3>${home} vs ${away}</h3>
-      <p>${league} • ${time}</p>
-    `;
-
-    div.onclick = () => openDetail(match);
-
-    els.list.appendChild(div);
-  });
-}
-
-
-// ===============================
-// DETALHE DO JOGO
-// ===============================
-function openDetail(match) {
-  if (!els.detailTitle || !els.detailBody) return;
-
-  const home = match.teams?.home?.name || "";
-  const away = match.teams?.away?.name || "";
-
-  els.detailTitle.innerText = `${home} vs ${away}`;
-
-  els.detailBody.innerHTML = `
-    <p>Liga: ${match.league_name || "-"}</p>
-    <p>Estado: ${match.status || "-"}</p>
-    <p>Minuto: ${match.minute || "-"}</p>
-  `;
-}
-
-
-// ===============================
-// INICIAR APP
-// ===============================
+// ================================
+// START
+// ================================
 document.addEventListener("DOMContentLoaded", () => {
   loadGames();
 });
