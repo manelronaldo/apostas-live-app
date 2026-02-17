@@ -2,69 +2,54 @@
 <html lang="pt">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Apostas Live</title>
 
 <style>
 body{
-    margin:0;
-    font-family:Arial, Helvetica, sans-serif;
-    background:#071226;
-    color:white;
+  background:#071427;
+  color:#fff;
+  font-family:Arial;
+  margin:0;
 }
 
-.header{
-    padding:20px;
-    background:#0c1f3a;
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-}
-
-h1{
-    margin:0;
-    font-size:24px;
+header{
+  padding:20px;
+  background:#0b1f3a;
+  font-size:22px;
+  font-weight:bold;
 }
 
 button{
-    background:#2d7df6;
-    border:none;
-    padding:10px 15px;
-    color:white;
-    border-radius:8px;
-    cursor:pointer;
-    font-weight:bold;
+  padding:10px 16px;
+  border:none;
+  border-radius:6px;
+  background:#2d7cff;
+  color:#fff;
+  cursor:pointer;
+  margin:20px;
 }
 
-.container{
-    max-width:900px;
-    margin:auto;
-    padding:20px;
+#games{
+  padding:20px;
 }
 
 .game{
-    background:#0f1b2b;
-    margin-bottom:12px;
-    padding:15px;
-    border-radius:10px;
+  background:#0e223f;
+  padding:18px;
+  margin-bottom:15px;
+  border-radius:10px;
 }
 </style>
 
 </head>
-
 <body>
 
-<div class="header">
-    <h1>⚽ Apostas Live</h1>
-    <button onclick="loadGames()">Atualizar Jogos</button>
-</div>
+<header>⚽ Apostas Live</header>
 
-<div class="container">
-    <!-- 🔥 ESTA DIV É O MAIS IMPORTANTE -->
-    <div id="games-list">A carregar jogos...</div>
-</div>
+<button onclick="loadGames()">Atualizar Jogos</button>
+
+<div id="games"></div>
 
 <script src="js/app.js"></script>
-
 </body>
 </html>
