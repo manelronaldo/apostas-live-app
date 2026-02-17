@@ -2,47 +2,66 @@
 <html lang="pt">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Apostas Live</title>
 
 <style>
 body{
-    background:#0b1220;
-    color:#fff;
-    font-family:Arial;
+    margin:0;
+    font-family:Arial, Helvetica, sans-serif;
+    background:#071226;
+    color:white;
+}
+
+.header{
     padding:20px;
+    background:#0c1f3a;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
 }
 
 h1{
-    margin-bottom:20px;
-}
-
-.game{
-    background:#111a2e;
-    padding:15px;
-    margin-bottom:10px;
-    border-radius:10px;
+    margin:0;
+    font-size:24px;
 }
 
 button{
-    background:#1e88e5;
+    background:#2d7df6;
     border:none;
-    padding:10px;
-    color:#fff;
-    border-radius:6px;
+    padding:10px 15px;
+    color:white;
+    border-radius:8px;
     cursor:pointer;
+    font-weight:bold;
+}
+
+.container{
+    max-width:900px;
+    margin:auto;
+    padding:20px;
+}
+
+.game{
+    background:#0f1b2b;
+    margin-bottom:12px;
+    padding:15px;
+    border-radius:10px;
 }
 </style>
+
 </head>
 
 <body>
 
-<h1>⚽ Apostas Live</h1>
+<div class="header">
+    <h1>⚽ Apostas Live</h1>
+    <button onclick="loadGames()">Atualizar Jogos</button>
+</div>
 
-<button onclick="loadGames()">Atualizar Jogos</button>
-
-<div id="games-list">
-A carregar jogos...
+<div class="container">
+    <!-- 🔥 ESTA DIV É O MAIS IMPORTANTE -->
+    <div id="games-list">A carregar jogos...</div>
 </div>
 
 <script src="js/app.js"></script>
