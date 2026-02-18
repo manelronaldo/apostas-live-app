@@ -754,14 +754,23 @@ if (!minConfidenceEl || !minEdgeEl) {
 
 minConfidenceElText.textContent = `${minConfidenceEl.value}%`;
 minEdgeElText.textContent = `${minEdgeEl.value}%`;
+     // Labels dos sliders (não rebenta se algum elemento não existir)
+const minEdgeEl = $("minEdge");
+const minEdgeTextEl = $("minEdgeText");
+if (minEdgeEl && minEdgeTextEl) {
+  minEdgeTextEl.textContent = `${minEdgeEl.value}%`;
+}
 
-    $("minEdgeText").textContent = `${$("minEdge").value}%`;
-
-    $("minConfidence").addEventListener("input", () => {
-const minEdgeEl = document.getElementById("minEdge");
-
-const minConfidenceTextEl = document.getElementById("minConfidenceText");
-const minEdgeTextEl = document.getElementById("minEdgeText");
+const minConfEl = $("minConfidence");
+const minConfTextEl = $("minConfidenceText");
+if (minConfEl && minConfTextEl) {
+  minConfTextEl.textContent = `${minConfEl.value}%`;
+  minConfEl.addEventListener("input", () => {
+    minConfTextEl.textContent = `${minConfEl.value}%`;
+    saveStorage?.();
+    render?.();
+  });
+}
 
 function updateSlidersText() {
   if (minConfidenceTextEl && minConfidenceEl) {
