@@ -758,7 +758,6 @@ minEdgeElText.textContent = `${minEdgeEl.value}%`;
     $("minEdgeText").textContent = `${$("minEdge").value}%`;
 
     $("minConfidence").addEventListener("input", () => {
-    const minConfidenceEl = document.getElementById("minConfidence");
 const minEdgeEl = document.getElementById("minEdge");
 
 const minConfidenceTextEl = document.getElementById("minConfidenceText");
