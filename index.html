@@ -1,470 +1,151 @@
 <!doctype html>
-<html lang="pt-PT">
+<html lang="pt">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <meta name="theme-color" content="#0b1220" />
   <title>Apostas Live</title>
-
-  <!-- Ícones -->
-  <link rel="icon" href="./favicon.ico" />
-
-  <!-- CSS principal (confere que existe em /css/style.css) -->
-  <link rel="stylesheet" href="./css/style.css?v=1" />
-
-  <!-- Fallback (se o teu CSS falhar, isto já deixa o site bonito) -->
-  <style>
-    :root{
-      --bg:#0b1220; --panel:#0f1b2d; --panel2:#0c1627;
-      --stroke:rgba(255,255,255,.08); --stroke2:rgba(255,255,255,.12);
-      --txt:#e8eefc; --muted:#9fb2d3;
-      --blue:#4aa3ff; --green:#29d39a; --yellow:#f4c84a; --red:#ff5a6a;
-      --shadow: 0 12px 28px rgba(0,0,0,.35);
-      --r:16px;
-    }
-    *{box-sizing:border-box}
-    html,body{height:100%}
-    body{
-      margin:0; font:14px/1.35 system-ui,-apple-system,Segoe UI,Roboto,Arial;
-      background:radial-gradient(1200px 600px at 20% -10%, rgba(74,163,255,.18), transparent 55%),
-                 radial-gradient(900px 500px at 90% 0%, rgba(41,211,154,.14), transparent 55%),
-                 var(--bg);
-      color:var(--txt);
-    }
-    a{color:inherit}
-    .app{min-height:100%; display:flex; flex-direction:column}
-    .topbar{
-      position:sticky; top:0; z-index:20;
-      backdrop-filter: blur(10px);
-      background:linear-gradient(180deg, rgba(11,18,32,.92), rgba(11,18,32,.72));
-      border-bottom:1px solid var(--stroke);
-    }
-    .topbar-inner{max-width:1180px; margin:0 auto; padding:14px 16px; display:flex; gap:14px; align-items:center}
-    .brand{display:flex; align-items:center; gap:10px; min-width:220px}
-    .logo{
-      width:34px; height:34px; border-radius:12px;
-      background:linear-gradient(135deg, rgba(74,163,255,.95), rgba(41,211,154,.85));
-      box-shadow:0 10px 22px rgba(0,0,0,.35);
-      display:grid; place-items:center; font-weight:800; color:#00152c;
-    }
-    .brand h1{margin:0; font-size:18px; letter-spacing:.2px}
-    .brand small{display:block; color:var(--muted); font-weight:500; margin-top:1px}
-    .tabs{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
-    .tab{
-      border:1px solid var(--stroke2); background:rgba(255,255,255,.03);
-      color:var(--txt); padding:9px 12px; border-radius:999px;
-      cursor:pointer; user-select:none;
-      display:flex; gap:8px; align-items:center;
-    }
-    .tab[aria-selected="true"]{
-      border-color:rgba(74,163,255,.45);
-      box-shadow:0 0 0 3px rgba(74,163,255,.12);
-      background:rgba(74,163,255,.08);
-    }
-    .pill{
-      padding:2px 8px; border-radius:999px; font-size:12px; color:var(--muted);
-      border:1px solid var(--stroke);
-      background:rgba(255,255,255,.03);
-    }
-    .spacer{flex:1}
-    .actions{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
-    .btn{
-      border:1px solid var(--stroke2); background:rgba(255,255,255,.04);
-      color:var(--txt); padding:10px 12px; border-radius:12px;
-      cursor:pointer; box-shadow:0 0 0 rgba(0,0,0,0);
-      display:flex; gap:8px; align-items:center;
-    }
-    .btn.primary{
-      border-color:rgba(74,163,255,.55);
-      background:linear-gradient(135deg, rgba(74,163,255,.22), rgba(41,211,154,.10));
-      box-shadow:0 10px 22px rgba(0,0,0,.25);
-    }
-    .btn:active{transform:translateY(1px)}
-    .container{max-width:1180px; margin:0 auto; padding:16px; width:100%}
-    .layout{display:grid; grid-template-columns:360px 1fr; gap:14px}
-    @media (max-width: 980px){ .layout{grid-template-columns:1fr} .brand{min-width:auto} }
-    .card{
-      background:linear-gradient(180deg, rgba(15,27,45,.86), rgba(12,22,39,.86));
-      border:1px solid var(--stroke);
-      border-radius:var(--r);
-      box-shadow:var(--shadow);
-      overflow:hidden;
-    }
-    .card-h{
-      padding:14px 14px 10px;
-      border-bottom:1px solid var(--stroke);
-      display:flex; justify-content:space-between; align-items:center; gap:10px;
-    }
-    .card-h h2{margin:0; font-size:14px; color:var(--muted); font-weight:650; letter-spacing:.25px; text-transform:uppercase}
-    .card-b{padding:14px}
-    .row{display:flex; gap:10px; align-items:center}
-    .row.wrap{flex-wrap:wrap}
-    .grid2{display:grid; grid-template-columns:1fr 1fr; gap:10px}
-    .grid3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px}
-    .field{display:flex; flex-direction:column; gap:6px}
-    label{color:var(--muted); font-size:12px}
-    input[type="text"], input[type="password"], select{
-      width:100%; padding:10px 10px;
-      border-radius:12px; border:1px solid var(--stroke2);
-      background:rgba(255,255,255,.03); color:var(--txt);
-      outline:none;
-    }
-    input::placeholder{color:rgba(159,178,211,.65)}
-    .switch{
-      display:flex; align-items:center; justify-content:space-between; gap:10px;
-      padding:10px 12px; border-radius:12px; border:1px solid var(--stroke2);
-      background:rgba(255,255,255,.03);
-    }
-    .switch strong{font-weight:650}
-    .switch small{display:block; color:var(--muted); margin-top:2px}
-    .hint{color:var(--muted); font-size:12px; margin-top:8px}
-    .seg{display:flex; gap:8px; flex-wrap:wrap}
-    .seg button{
-      padding:9px 10px; border-radius:999px; cursor:pointer;
-      border:1px solid var(--stroke2); background:rgba(255,255,255,.03); color:var(--txt)
-    }
-    .seg button[aria-pressed="true"]{
-      border-color:rgba(74,163,255,.55); background:rgba(74,163,255,.10);
-      box-shadow:0 0 0 3px rgba(74,163,255,.10);
-    }
-    .divider{height:1px; background:var(--stroke); margin:12px 0}
-    .status{
-      display:flex; align-items:center; gap:10px; flex-wrap:wrap;
-      color:var(--muted); font-size:12px;
-    }
-    .dot{width:8px; height:8px; border-radius:999px; background:rgba(159,178,211,.55)}
-    .dot.ok{background:rgba(41,211,154,.9)}
-    .dot.bad{background:rgba(255,90,106,.95)}
-    .main-head{
-      display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;
-      margin-bottom:12px;
-    }
-    .searchbar{display:flex; gap:10px; flex:1; min-width:260px}
-    .searchbar input{flex:1}
-    .chips{display:flex; gap:8px; flex-wrap:wrap}
-    .chip{
-      border:1px solid var(--stroke2); background:rgba(255,255,255,.03);
-      padding:8px 10px; border-radius:999px; color:var(--muted); cursor:pointer;
-    }
-    .chip[aria-pressed="true"]{color:var(--txt); border-color:rgba(244,200,74,.45); background:rgba(244,200,74,.08)}
-    .list{display:grid; grid-template-columns:1fr; gap:10px}
-    .match{
-      padding:12px; border:1px solid var(--stroke); border-radius:14px;
-      background:linear-gradient(180deg, rgba(12,22,39,.55), rgba(12,22,39,.35));
-      display:grid; grid-template-columns:1fr auto; gap:10px; align-items:center;
-    }
-    .match strong{font-size:14px}
-    .match .meta{color:var(--muted); font-size:12px; margin-top:4px}
-    .badges{display:flex; gap:8px; align-items:center; justify-content:flex-end; flex-wrap:wrap}
-    .badge{
-      font-size:12px; padding:6px 10px; border-radius:999px;
-      border:1px solid var(--stroke2); background:rgba(255,255,255,.03); color:var(--muted);
-      white-space:nowrap;
-    }
-    .b-blue{border-color:rgba(74,163,255,.45); color:rgba(74,163,255,.95); background:rgba(74,163,255,.10)}
-    .b-green{border-color:rgba(41,211,154,.45); color:rgba(41,211,154,.95); background:rgba(41,211,154,.10)}
-    .b-yellow{border-color:rgba(244,200,74,.45); color:rgba(244,200,74,.95); background:rgba(244,200,74,.10)}
-    .b-red{border-color:rgba(255,90,106,.45); color:rgba(255,90,106,.95); background:rgba(255,90,106,.10)}
-    .footer{
-      padding:14px 16px; color:rgba(159,178,211,.70);
-      border-top:1px solid var(--stroke);
-      margin-top:auto;
-    }
-    .footer-inner{max-width:1180px; margin:0 auto; display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap}
-    .kbd{border:1px solid var(--stroke2); border-bottom-color:rgba(255,255,255,.18); padding:2px 6px; border-radius:8px; font-size:12px; color:var(--muted)}
-    /* Modal */
-    dialog{
-      border:none; border-radius:18px; padding:0; width:min(720px, 94vw);
-      background:linear-gradient(180deg, rgba(15,27,45,.96), rgba(12,22,39,.96));
-      color:var(--txt); box-shadow:0 20px 60px rgba(0,0,0,.55);
-    }
-    dialog::backdrop{background:rgba(0,0,0,.55)}
-    .modal-h{padding:14px 14px 10px; border-bottom:1px solid var(--stroke); display:flex; align-items:center; justify-content:space-between; gap:10px}
-    .modal-h strong{font-size:14px}
-    .modal-b{padding:14px}
-    .mono{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace}
-    .muted{color:var(--muted)}
-  </style>
+  <link rel="stylesheet" href="css/style.css" />
 </head>
-
 <body>
-  <div class="app">
-
-    <!-- TOPBAR -->
-    <header class="topbar">
-      <div class="topbar-inner">
-        <div class="brand" title="Apostas Live">
-          <div class="logo">AL</div>
-          <div>
-            <h1>Apostas Live</h1>
-            <small>Live + Próximos (API)</small>
-          </div>
-        </div>
-
-        <nav class="tabs" role="tablist" aria-label="Modo">
-          <button id="tabLive" class="tab" role="tab" aria-selected="true" data-mode="live">
-            <span>AO VIVO</span>
-            <span id="countLive" class="pill">—</span>
-          </button>
-          <button id="tabNext" class="tab" role="tab" aria-selected="false" data-mode="next">
-            <span>PRÓXIMOS</span>
-            <span id="countNext" class="pill">—</span>
-          </button>
-        </nav>
-
-        <div class="spacer"></div>
-
-        <div class="actions">
-          <button id="btnRefresh" class="btn primary" type="button" title="Atualizar (R)">
-            ⟳ <span>Atualizar</span>
-          </button>
-          <button id="btnHelp" class="btn" type="button" title="Ajuda / Como funciona">
-            ? <span>Ajuda</span>
-          </button>
-        </div>
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">AL</div>
+      <div>
+        <div class="title">Apostas Live</div>
+        <div class="subtitle">Live + Próximos (API)</div>
       </div>
-    </header>
+    </div>
 
-    <main class="container">
-      <div class="layout">
+    <div class="tabs">
+      <button id="tabLive" class="tab active">AO VIVO</button>
+      <button id="tabNext" class="tab">PRÓXIMOS</button>
+    </div>
 
-        <!-- SIDEBAR / CONTROLOS -->
-        <section class="card" aria-label="Configurações">
-          <div class="card-h">
-            <h2>Configurações</h2>
-            <span id="apiStatus" class="status">
-              <span class="dot" id="apiDot"></span>
-              <span id="apiText">Aguardando…</span>
-            </span>
-          </div>
+    <div class="actions">
+      <button id="btnRefresh" class="btn">Atualizar</button>
+      <button id="btnHelp" class="btn ghost">Ajuda</button>
+    </div>
+  </header>
 
-          <div class="card-b">
+  <main class="layout">
+    <aside class="panel">
+      <h2>Configurações</h2>
 
-            <div class="switch">
-              <div>
-                <strong>Auto-refresh</strong>
-                <small>Atualiza sozinho (ao vivo e próximos)</small>
-              </div>
-              <div class="row">
-                <input id="autoRefresh" type="checkbox" checked />
-              </div>
-            </div>
-
-            <div class="grid2" style="margin-top:10px;">
-              <div class="field">
-                <label for="refreshEvery">Intervalo</label>
-                <select id="refreshEvery">
-                  <option value="10">10s</option>
-                  <option value="20" selected>20s</option>
-                  <option value="30">30s</option>
-                  <option value="60">60s</option>
-                </select>
-              </div>
-              <div class="field">
-                <label for="orderBy">Ordenar</label>
-                <select id="orderBy">
-                  <option value="confidence" selected>Confiança</option>
-                  <option value="value">Value (edge)</option>
-                  <option value="time">Hora</option>
-                  <option value="league">Liga</option>
-                </select>
-              </div>
-            </div>
-
-            <div class="grid2" style="margin-top:10px;">
-              <div class="field">
-                <label for="minConf">Min. confiança</label>
-                <input id="minConf" type="text" placeholder="ex: 35 (0-100)" value="35" />
-              </div>
-              <div class="field">
-                <label for="minEdge">Min. value (edge)</label>
-                <input id="minEdge" type="text" placeholder="ex: 0 (0-100)" value="0" />
-              </div>
-            </div>
-
-            <div class="divider"></div>
-
-            <div class="field">
-              <label for="apiBase">API Base (Cloudflare Worker)</label>
-              <input id="apiBase" type="text" placeholder="https://apostas-live-api.manelronaldo1.workers.dev"
-                     value="https://apostas-live-api.manelronaldo1.workers.dev" />
-              <div class="hint">Dica: cola a base completa (termina em <span class="mono">workers.dev</span>).</div>
-            </div>
-
-            <div class="grid2" style="margin-top:10px;">
-              <div class="field">
-                <label for="apiPassword">Password (se tiveres)</label>
-                <input id="apiPassword" type="password" placeholder="(opcional)" />
-              </div>
-              <div class="field">
-                <label>Favoritos</label>
-                <button id="btnFavOnly" class="btn" type="button" style="width:100%; justify-content:center;">
-                  ★ Só favoritos
-                </button>
-              </div>
-            </div>
-
-            <div class="divider"></div>
-
-            <div class="field">
-              <label>Mercado base</label>
-              <div class="seg" role="group" aria-label="Mercado">
-                <button type="button" class="mkt" data-market="1x2" aria-pressed="true">1X2</button>
-                <button type="button" class="mkt" data-market="ou25" aria-pressed="false">Over/Under 2.5</button>
-                <button type="button" class="mkt" data-market="btts" aria-pressed="false">BTTS</button>
-              </div>
-              <div class="hint">O “score” usa o mercado escolhido + comparação com a tua odd.</div>
-            </div>
-
-            <div class="divider"></div>
-
-            <div class="field">
-              <label>Multiplas sugeridas</label>
-              <div class="grid2">
-                <div class="field">
-                  <label for="perfil">Perfil</label>
-                  <select id="perfil">
-                    <option value="balanced" selected>Equilibrado</option>
-                    <option value="safe">Conservador</option>
-                    <option value="aggressive">Agressivo</option>
-                  </select>
-                </div>
-                <div class="field">
-                  <label for="nJogos">Nº jogos</label>
-                  <select id="nJogos">
-                    <option>2</option>
-                    <option selected>3</option>
-                    <option>4</option>
-                    <option>5</option>
-                  </select>
-                </div>
-              </div>
-
-              <button id="btnGerarMultipla" class="btn primary" type="button" style="width:100%; justify-content:center; margin-top:10px;">
-                ⚡ Gerar Múltipla
-              </button>
-
-              <div class="hint muted" id="multiplaHint">Geradas por value + confiança (ajustável).</div>
-            </div>
-
-          </div>
-        </section>
-
-        <!-- MAIN LISTA -->
-        <section class="card" aria-label="Jogos">
-          <div class="card-h">
-            <h2 id="listTitle">Jogos</h2>
-            <span class="pill" id="listCount">0</span>
-          </div>
-
-          <div class="card-b">
-            <div class="main-head">
-              <div class="searchbar">
-                <input id="search" type="text" placeholder="Pesquisar liga / equipa / país…" />
-                <select id="daysNext" title="Dias (próximos)">
-                  <option value="1">1 dia</option>
-                  <option value="2">2 dias</option>
-                  <option value="3" selected>3 dias</option>
-                  <option value="5">5 dias</option>
-                  <option value="7">7 dias</option>
-                </select>
-              </div>
-              <div class="chips">
-                <button class="chip" id="chipAll" aria-pressed="true" type="button">Tudo</button>
-                <button class="chip" id="chipTop" aria-pressed="false" type="button">Top (Azul)</button>
-                <button class="chip" id="chipGood" aria-pressed="false" type="button">Boa (Verde)</button>
-                <button class="chip" id="chipMid" aria-pressed="false" type="button">Média (Amarelo)</button>
-                <button class="chip" id="chipBad" aria-pressed="false" type="button">Fraca (Vermelho)</button>
-              </div>
-            </div>
-
-            <div id="emptyState" class="muted" style="padding:10px 2px;">
-              Sem jogos para mostrar. Pode não haver AO VIVO agora ou o filtro está demasiado apertado.
-            </div>
-
-            <div id="gamesList" class="list" aria-live="polite"></div>
-          </div>
-        </section>
-
-      </div>
-    </main>
-
-    <footer class="footer">
-      <div class="footer-inner">
-        <div>Notas: <span class="badge b-blue">azul</span> top · <span class="badge b-green">verde</span> boa · <span class="badge b-yellow">amarelo</span> média · <span class="badge b-red">vermelho</span> fraca</div>
-        <div>Atalhos: <span class="kbd">R</span> atualizar · <span class="kbd">/</span> pesquisar</div>
-      </div>
-    </footer>
-
-    <!-- MODAL: AJUDA -->
-    <dialog id="dlgHelp">
-      <div class="modal-h">
-        <strong>Ajuda / Como funciona</strong>
-        <button class="btn" type="button" id="btnCloseHelp">Fechar</button>
-      </div>
-      <div class="modal-b">
-        <p class="muted">
-          • O “score” usa o mercado escolhido + comparação com a tua odd (“value/edge”).<br />
-          • Se aparecer <span class="mono">0 jogos</span>, confirma se o campo <span class="mono">API Base</span> está completo (termina em <span class="mono">workers.dev</span>).<br />
-          • Em “PRÓXIMOS”, o selector “dias” controla quantos dias vais buscar.
-        </p>
-        <div class="divider"></div>
-        <p class="muted">
-          Próximo passo (para ficar tipo app): cards com odds por mercado, painel do jogo com estatísticas, e botão “Porquê” com o cálculo detalhado.
-        </p>
-      </div>
-    </dialog>
-
-    <!-- MODAL: PORQUÊ (o teu JS deve preencher) -->
-    <dialog id="dlgWhy">
-      <div class="modal-h">
-        <strong id="whyTitle">Porque é que isto é “boa”?</strong>
-        <button class="btn" type="button" id="btnCloseWhy">Fechar</button>
-      </div>
-      <div class="modal-b">
-        <div id="whyBody" class="muted">
-          Seleciona um jogo e clica “Porquê”.
+      <div class="row">
+        <label class="switch">
+          <input id="autoRefresh" type="checkbox" checked />
+          <span class="slider"></span>
+        </label>
+        <div class="switchText">
+          <div class="switchTitle">Auto-refresh</div>
+          <div class="switchSub">Atualiza sozinho (ao vivo e próximos)</div>
         </div>
       </div>
-    </dialog>
 
-    <!-- JS principal (confere que existe em /js/app.js) -->
-    <script defer src="./js/app.js?v=1"></script>
+      <div class="grid2">
+        <div class="field">
+          <label>Intervalo</label>
+          <select id="refreshInterval">
+            <option value="10">10s</option>
+            <option value="20" selected>20s</option>
+            <option value="30">30s</option>
+            <option value="60">60s</option>
+          </select>
+        </div>
 
-    <!-- Pequenos binds de UI (não mexe na tua lógica, só UI) -->
-    <script>
-      (function(){
-        const $ = (id)=>document.getElementById(id);
-        const tabLive = $("tabLive"), tabNext = $("tabNext");
-        const dlgHelp = $("dlgHelp"), btnHelp=$("btnHelp"), btnCloseHelp=$("btnCloseHelp");
-        const dlgWhy = $("dlgWhy"), btnCloseWhy=$("btnCloseWhy");
+        <div class="field">
+          <label>Ordenar</label>
+          <select id="sortBy">
+            <option value="confidence" selected>Confiança</option>
+            <option value="edge">Value (edge)</option>
+            <option value="time">Hora</option>
+          </select>
+        </div>
 
-        btnHelp?.addEventListener("click", ()=> dlgHelp?.showModal());
-        btnCloseHelp?.addEventListener("click", ()=> dlgHelp?.close());
-        btnCloseWhy?.addEventListener("click", ()=> dlgWhy?.close());
+        <div class="field">
+          <label>Min. confiança <span id="minConfidenceText" class="pill">35%</span></label>
+          <input id="minConfidence" type="range" min="0" max="100" value="35" />
+        </div>
 
-        // Tabs (o teu app.js pode também controlar; isto só marca seleção)
-        function setTab(mode){
-          const live = mode==="live";
-          tabLive?.setAttribute("aria-selected", live ? "true":"false");
-          tabNext?.setAttribute("aria-selected", !live ? "true":"false");
-        }
-        tabLive?.addEventListener("click", ()=>setTab("live"));
-        tabNext?.addEventListener("click", ()=>setTab("next"));
+        <div class="field">
+          <label>Min. value (edge) <span id="minEdgeText" class="pill">0%</span></label>
+          <input id="minEdge" type="range" min="0" max="50" value="0" />
+        </div>
+      </div>
 
-        // Atalhos
-        window.addEventListener("keydown",(e)=>{
-          if(e.key === "/" && document.activeElement?.tagName !== "INPUT"){
-            e.preventDefault();
-            $("search")?.focus();
-          }
-          if((e.key==="r" || e.key==="R") && document.activeElement?.tagName !== "INPUT"){
-            e.preventDefault();
-            $("btnRefresh")?.click();
-          }
-        });
-      })();
-    </script>
+      <div class="field">
+        <label>Pesquisar</label>
+        <input id="search" type="text" placeholder="liga / equipa / país..." />
+      </div>
+
+      <div class="field">
+        <label>API Base (Cloudflare Worker)</label>
+        <input id="apiBase" type="text" placeholder="https://apostas-live-api....workers.dev" />
+        <div class="hint">Dica: cola a base completa (termina em workers.dev).</div>
+      </div>
+
+      <div class="field">
+        <label>Password (se tiveres)</label>
+        <input id="apiPass" type="password" placeholder="(opcional)" />
+      </div>
+
+      <div class="field">
+        <label>Mercado base</label>
+        <div class="segmented">
+          <button class="seg active" data-market="1x2">1X2</button>
+          <button class="seg" data-market="ou25">Over/Under 2.5</button>
+          <button class="seg" data-market="btts">BTTS</button>
+        </div>
+        <div class="hint">O “score” usa o mercado escolhido + comparação com a tua odd.</div>
+      </div>
+
+      <div class="footerInfo">
+        <div id="statusLine">Aguardando…</div>
+        <div class="tiny" id="lastUpdate">—</div>
+      </div>
+    </aside>
+
+    <section class="content">
+      <div class="contentHeader">
+        <h2>Jogos</h2>
+        <select id="days" class="days">
+          <option value="1">1 dia</option>
+          <option value="3" selected>3 dias</option>
+          <option value="7">7 dias</option>
+        </select>
+      </div>
+
+      <div class="filtersRow">
+        <button class="chip active" data-level="all">Tudo</button>
+        <button class="chip" data-level="top">Top (Azul)</button>
+        <button class="chip" data-level="good">Boa (Verde)</button>
+        <button class="chip" data-level="mid">Média (Amarelo)</button>
+        <button class="chip" data-level="bad">Fraca (Vermelho)</button>
+      </div>
+
+      <div id="games" class="games"></div>
+
+      <div id="empty" class="empty hidden">
+        Sem jogos para mostrar. Pode não haver AO VIVO agora ou o filtro está demasiado apertado.
+      </div>
+    </section>
+  </main>
+
+  <!-- Modal -->
+  <div id="modal" class="modal hidden">
+    <div class="modalBox">
+      <div class="modalTop">
+        <div>
+          <div id="modalTitle" class="modalTitle">Porque?</div>
+          <div id="modalSub" class="modalSub">Explicação do score</div>
+        </div>
+        <button id="modalClose" class="btn ghost">Fechar</button>
+      </div>
+      <div id="modalBody" class="modalBody"></div>
+    </div>
   </div>
+
+  <script src="js/app.js"></script>
 </body>
 </html>
+
