@@ -4,28 +4,104 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Apostas Live</title>
-
-  <link rel="stylesheet" href="./css/style.css" />
-  <script src="./js/app.js" defer></script>
+  <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-  <header class="top">
+  <header class="topbar">
     <div class="brand">
-      <div class="ball">⚽</div>
+      <div class="logo">⚽</div>
       <div>
         <div class="title">Apostas Live</div>
         <div class="subtitle">Live + Próximos (API)</div>
       </div>
     </div>
+
+    <div class="top-actions">
+      <button id="btnLive" class="seg active">AO VIVO</button>
+      <button id="btnNext" class="seg">PRÓXIMOS</button>
+
+      <div class="iconBtn" title="Favoritos" id="btnFavs">⭐</div>
+      <div class="iconBtn" title="Filtros" id="btnFilters">⛃</div>
+    </div>
   </header>
 
   <main class="wrap">
-    <div class="actions">
-      <button id="btnRefresh">Atualizar Jogos</button>
-      <div id="meta" class="meta"></div>
+    <section class="toolbar">
+      <button id="btnRefresh" class="primary">Atualizar</button>
+
+      <div class="status" id="statusText">—</div>
+
+      <div class="right">
+        <label class="toggle">
+          <input id="autoRefresh" type="checkbox" checked />
+          <span>Auto-refresh</span>
+        </label>
+
+        <select id="refreshRate">
+          <option value="10">10s</option>
+          <option value="20" selected>20s</option>
+          <option value="30">30s</option>
+          <option value="60">60s</option>
+        </select>
+
+        <input id="search" class="search" placeholder="Pesquisar liga/equipas..." />
+      </div>
+    </section>
+
+    <section id="list" class="list"></section>
+
+    <section class="accumulator">
+      <div class="accHeader">
+        <div>
+          <div class="accTitle">Múltiplas Sugeridas</div>
+          <div class="accSub">Seleção automática por “value” + confiança (ajustável)</div>
+        </div>
+        <div class="accControls">
+          <select id="accMode">
+            <option value="conservative">Conservador</option>
+            <option value="balanced" selected>Equilibrado</option>
+            <option value="aggressive">Agressivo</option>
+          </select>
+          <button id="btnBuildAcc" class="secondary">Gerar Múltipla</button>
+        </div>
+      </div>
+      <div id="accBody" class="accBody">Ainda não geraste uma múltipla.</div>
+    </section>
+  </main>
+
+  <!-- Drawer (filtros/favoritos/explicações) -->
+  <div id="drawerBack" class="drawerBack hidden"></div>
+  <aside id="drawer" class="drawer hidden" aria-hidden="true">
+    <div class="drawerTop">
+      <div id="drawerTitle" class="drawerTitle">Painel</div>
+      <button id="drawerClose" class="drawerClose">✕</button>
+    </div>
+    <div id="drawerContent" class="drawerContent"></div>
+  </aside>
+
+  <!-- Modal detalhe jogo -->
+  <div id="modalBack" class="modalBack hidden"></div>
+  <div id="modal" class="modal hidden" aria-hidden="true">
+    <div class="modalTop">
+      <div class="modalTitle" id="modalTitle">Jogo</div>
+      <button id="modalClose" class="drawerClose">✕</button>
     </div>
 
-    <div id="games" class="grid"></div>
-  </main>
+    <div class="matchHeader" id="matchHeader"></div>
+
+    <div class="tabs">
+      <button class="tab active" data-tab="full">90 MIN</button>
+      <button class="tab" data-tab="ht">1ª PARTE</button>
+      <button class="tab" data-tab="sh">2ª PARTE</button>
+      <button class="tab" data-tab="stats">ESTATÍSTICAS</button>
+    </div>
+
+    <div class="panel" id="panelFull"></div>
+    <div class="panel hidden" id="panelHT"></div>
+    <div class="panel hidden" id="panelSH"></div>
+    <div class="panel hidden" id="panelStats"></div>
+  </div>
+
+  <script src="./app.js"></script>
 </body>
 </html>
