@@ -4,104 +4,219 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Apostas Live</title>
-  <link rel="stylesheet" href="./styles.css" />
+
+  <!-- ✅ CAMINHO CERTO (GitHub Pages) -->
+  <link rel="stylesheet" href="./css/style.css" />
 </head>
+
 <body>
-  <header class="topbar">
-    <div class="brand">
-      <div class="logo">⚽</div>
-      <div>
-        <div class="title">Apostas Live</div>
-        <div class="subtitle">Live + Próximos (API)</div>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="logo">⚽</div>
+        <div class="brandText">
+          <div class="title">Apostas Live</div>
+          <div class="subtitle">Live + Próximos (API)</div>
+        </div>
       </div>
-    </div>
 
-    <div class="top-actions">
-      <button id="btnLive" class="seg active">AO VIVO</button>
-      <button id="btnNext" class="seg">PRÓXIMOS</button>
+      <div class="topActions">
+        <button id="btnRefresh" class="btn primary">Atualizar</button>
+        <div class="segmented" role="tablist" aria-label="Modo">
+          <button id="tabLive" class="segBtn active" role="tab">AO VIVO</button>
+          <button id="tabUpcoming" class="segBtn" role="tab">PRÓXIMOS</button>
+        </div>
+      </div>
+    </header>
 
-      <div class="iconBtn" title="Favoritos" id="btnFavs">⭐</div>
-      <div class="iconBtn" title="Filtros" id="btnFilters">⛃</div>
-    </div>
-  </header>
+    <section class="controls">
+      <div class="controlRow">
+        <div class="pill">
+          <span class="dot ok"></span>
+          <span id="statusText">Pronto.</span>
+        </div>
 
-  <main class="wrap">
-    <section class="toolbar">
-      <button id="btnRefresh" class="primary">Atualizar</button>
-
-      <div class="status" id="statusText">—</div>
-
-      <div class="right">
-        <label class="toggle">
-          <input id="autoRefresh" type="checkbox" checked />
+        <label class="control">
           <span>Auto-refresh</span>
+          <div class="inline">
+            <input id="autoRefresh" type="checkbox" checked />
+            <select id="refreshEvery">
+              <option value="10">10s</option>
+              <option value="20" selected>20s</option>
+              <option value="30">30s</option>
+              <option value="60">60s</option>
+            </select>
+          </div>
         </label>
 
-        <select id="refreshRate">
-          <option value="10">10s</option>
-          <option value="20" selected>20s</option>
-          <option value="30">30s</option>
-          <option value="60">60s</option>
-        </select>
+        <label class="control">
+          <span>Pesquisar</span>
+          <input id="search" type="text" placeholder="liga / equipa / país..." />
+        </label>
 
-        <input id="search" class="search" placeholder="Pesquisar liga/equipas..." />
-      </div>
-    </section>
-
-    <section id="list" class="list"></section>
-
-    <section class="accumulator">
-      <div class="accHeader">
-        <div>
-          <div class="accTitle">Múltiplas Sugeridas</div>
-          <div class="accSub">Seleção automática por “value” + confiança (ajustável)</div>
-        </div>
-        <div class="accControls">
-          <select id="accMode">
-            <option value="conservative">Conservador</option>
-            <option value="balanced" selected>Equilibrado</option>
-            <option value="aggressive">Agressivo</option>
+        <label class="control">
+          <span>Ordenar</span>
+          <select id="sortBy">
+            <option value="confidence">Confiança</option>
+            <option value="value">Value (edge)</option>
+            <option value="time">Hora</option>
+            <option value="league">Liga</option>
           </select>
-          <button id="btnBuildAcc" class="secondary">Gerar Múltipla</button>
+        </label>
+
+        <label class="control">
+          <span>Min confiança</span>
+          <input id="minConfidence" type="range" min="0" max="100" value="35" />
+          <div class="tiny"><span id="minConfidenceText">35%</span></div>
+        </label>
+
+        <label class="control">
+          <span>Min value (edge)</span>
+          <input id="minEdge" type="range" min="-10" max="20" value="0" />
+          <div class="tiny"><span id="minEdgeText">0%</span></div>
+        </label>
+      </div>
+
+      <div class="controlRow">
+        <label class="control">
+          <span>API Base (Cloudflare Worker)</span>
+          <input id="apiBase" type="text" value="https://apostas-live-api.manelronaldo1.workers.dev" />
+          <div class="tiny muted">Ex: https://apostas-live-api.manelronaldo1.workers.dev</div>
+        </label>
+
+        <label class="control">
+          <span>Password (se tiveres)</span>
+          <input id="apiPassword" type="password" placeholder="(opcional)" />
+          <div class="tiny muted">Se o Worker exigir, mete aqui.</div>
+        </label>
+
+        <div class="control">
+          <span>Mercado base</span>
+          <div class="chips" id="marketChips">
+            <button class="chip active" data-market="match_winner">1X2</button>
+            <button class="chip" data-market="over_under_25">Over/Under 2.5</button>
+            <button class="chip" data-market="btts">BTTS</button>
+          </div>
+          <div class="tiny muted">O “score” usa o mercado escolhido + comparação com a tua odd.</div>
         </div>
       </div>
-      <div id="accBody" class="accBody">Ainda não geraste uma múltipla.</div>
     </section>
-  </main>
 
-  <!-- Drawer (filtros/favoritos/explicações) -->
-  <div id="drawerBack" class="drawerBack hidden"></div>
-  <aside id="drawer" class="drawer hidden" aria-hidden="true">
-    <div class="drawerTop">
-      <div id="drawerTitle" class="drawerTitle">Painel</div>
-      <button id="drawerClose" class="drawerClose">✕</button>
-    </div>
-    <div id="drawerContent" class="drawerContent"></div>
-  </aside>
+    <main class="main">
+      <section class="left">
+        <div class="sectionHeader">
+          <div class="h">Jogos</div>
+          <div class="rightInfo">
+            <span class="badge" id="countBadge">0</span>
+            <button id="btnOnlyFav" class="btn ghost">⭐ Só favoritos</button>
+          </div>
+        </div>
 
-  <!-- Modal detalhe jogo -->
-  <div id="modalBack" class="modalBack hidden"></div>
-  <div id="modal" class="modal hidden" aria-hidden="true">
-    <div class="modalTop">
-      <div class="modalTitle" id="modalTitle">Jogo</div>
-      <button id="modalClose" class="drawerClose">✕</button>
-    </div>
+        <div id="gamesGrid" class="grid"></div>
 
-    <div class="matchHeader" id="matchHeader"></div>
+        <div id="emptyState" class="empty">
+          <div class="emptyTitle">Sem jogos para mostrar.</div>
+          <div class="emptyText">Pode não haver AO VIVO agora ou o filtro está demasiado apertado.</div>
+        </div>
+      </section>
 
-    <div class="tabs">
-      <button class="tab active" data-tab="full">90 MIN</button>
-      <button class="tab" data-tab="ht">1ª PARTE</button>
-      <button class="tab" data-tab="sh">2ª PARTE</button>
-      <button class="tab" data-tab="stats">ESTATÍSTICAS</button>
-    </div>
+      <aside class="right">
+        <div class="card">
+          <div class="cardHeader">
+            <div class="h">Múltiplas sugeridas</div>
+            <div class="tiny muted">Geradas por value + confiança (ajustável)</div>
+          </div>
 
-    <div class="panel" id="panelFull"></div>
-    <div class="panel hidden" id="panelHT"></div>
-    <div class="panel hidden" id="panelSH"></div>
-    <div class="panel hidden" id="panelStats"></div>
+          <div class="row">
+            <label class="control mini">
+              <span>Perfil</span>
+              <select id="parlayProfile">
+                <option value="balanced" selected>Equilibrado</option>
+                <option value="safe">Mais seguro</option>
+                <option value="aggressive">Agressivo</option>
+              </select>
+            </label>
+
+            <label class="control mini">
+              <span>Nº jogos</span>
+              <select id="parlaySize">
+                <option value="2">2</option>
+                <option value="3" selected>3</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
+              </select>
+            </label>
+          </div>
+
+          <button id="btnGenerateParlay" class="btn primary full">Gerar Múltipla</button>
+
+          <div id="parlayBox" class="parlayBox">
+            <div class="tiny muted">Ainda não geraste uma múltipla.</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="cardHeader">
+            <div class="h">Painel</div>
+          </div>
+
+          <div class="panel">
+            <div class="panelRow">
+              <div class="k">Modo</div>
+              <div class="v" id="modeText">AO VIVO</div>
+            </div>
+            <div class="panelRow">
+              <div class="k">Última atualização</div>
+              <div class="v" id="lastUpdate">—</div>
+            </div>
+            <div class="panelRow">
+              <div class="k">Auto-refresh</div>
+              <div class="v" id="autoText">Ligado</div>
+            </div>
+            <div class="panelRow">
+              <div class="k">Mercado</div>
+              <div class="v" id="marketText">1X2</div>
+            </div>
+            <div class="panelRow">
+              <div class="k">Endpoint</div>
+              <div class="v mono" id="endpointText">/jogos</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="cardHeader">
+            <div class="h">Notas</div>
+          </div>
+          <div class="notes">
+            <div class="tiny muted">
+              • Cores: <b>azul</b>=top, <b>verde</b>=boa, <b>amarelo</b>=média, <b>vermelho</b>=fraca.<br/>
+              • “Value (edge)” compara a tua odd com a odd do mercado (API) e dá prioridade quando há vantagem.<br/>
+              • O botão <b>Porquê</b> explica o cálculo.
+            </div>
+          </div>
+        </div>
+      </aside>
+    </main>
   </div>
 
-  <script src="./app.js"></script>
+  <!-- MODAL: Detalhe / Porquê -->
+  <div id="modal" class="modal hidden" aria-hidden="true">
+    <div class="modalBackdrop" id="modalClose"></div>
+    <div class="modalCard">
+      <div class="modalHeader">
+        <div class="h" id="modalTitle">Detalhes</div>
+        <button class="btn ghost" id="modalX">Fechar</button>
+      </div>
+      <div class="modalBody" id="modalBody"></div>
+      <div class="modalFooter">
+        <button class="btn ghost" id="btnCopy">Copiar resumo</button>
+        <button class="btn primary" id="modalOk">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ✅ CAMINHO CERTO (GitHub Pages) -->
+  <script src="./js/app.js"></script>
 </body>
 </html>
