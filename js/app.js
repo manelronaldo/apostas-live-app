@@ -1,57 +1,53 @@
 (() => {
-  // ✅ ESTE É O PASSO 5 — e é OBRIGATÓRIO
-  const API_URL = "https://apostas-live-api.manelronaldo1.workers.dev/jogos";
+  const API_LIVE = "https://apostas-live-api.manelronaldo1.workers.dev/jogos";
+  const API_NEXT = "https://apostas-live-api.manelronaldo1.workers.dev/proximos";
 
   const btn = document.getElementById("btnRefresh");
   const meta = document.getElementById("meta");
   const gamesEl = document.getElementById("games");
 
-  function esc(s) {
-    return String(s ?? "")
-      .replaceAll("&","&amp;")
-      .replaceAll("<","&lt;")
-      .replaceAll(">","&gt;")
-      .replaceAll('"',"&quot;")
-      .replaceAll("'","&#039;");
-  }
+  const esc = (s) => String(s ?? "")
+    .replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;").replaceAll("'","&#039;");
 
-  function setMeta(text, type = "") {
+  function setMeta(text, type=""){
     meta.textContent = text;
     meta.className = "meta" + (type ? " " + type : "");
   }
 
-  function renderMessage(msg, isError = false) {
+  function renderMessage(msg, isError=false){
     gamesEl.innerHTML = `<div class="card ${isError ? "err" : ""}">${esc(msg)}</div>`;
   }
 
-  function normalizePayload(payload) {
+  function normalizeGames(payload){
     if (payload && Array.isArray(payload.games)) return payload.games;
     if (Array.isArray(payload)) return payload;
-    if (payload && Array.isArray(payload.data)) return payload.data;
-    if (payload && Array.isArray(payload.results)) return payload.results;
     return [];
   }
 
-  function getField(obj, keys, fallback = "") {
-    for (const k of keys) {
-      if (obj && obj[k] !== undefined && obj[k] !== null && obj[k] !== "") return obj[k];
-    }
+  function getField(obj, keys, fallback=""){
+    for (const k of keys) if (obj && obj[k] != null && obj[k] !== "") return obj[k];
     return fallback;
   }
 
-  function renderGames(list) {
-    if (!list.length) {
-      renderMessage("Não há jogos a aparecer (0). Pode ser que não existam jogos AO VIVO agora.", true);
+  function fmtTime(startTime){
+    if (!startTime) return "";
+    const d = new Date(startTime);
+    if (Number.isNaN(d.getTime())) return startTime;
+    return d.toLocaleString();
+  }
+
+  function renderGames(list, label){
+    if (!list.length){
+      renderMessage("Ainda não há jogos (nem live nem próximos).", true);
       return;
     }
 
     gamesEl.innerHTML = list.map((g) => {
       const league = getField(g, ["league"], "—");
-      const home = getField(g, ["homeTeam","home","team1"], "—");
-      const away = getField(g, ["awayTeam","away","team2"], "—");
-      const startRaw = getField(g, ["startTime","date","time"], "");
-      const time = startRaw ? new Date(startRaw).toLocaleString() : "";
-
+      const home = getField(g, ["homeTeam"], "—");
+      const away = getField(g, ["awayTeam"], "—");
+      const time = fmtTime(getField(g, ["startTime"], ""));
       const status = getField(g, ["status"], "");
       const sh = getField(g, ["homeScore"], "");
       const sa = getField(g, ["awayScore"], "");
@@ -67,37 +63,54 @@
             </div>
           </div>
           <div class="teams">${esc(home)} <b>vs</b> ${esc(away)}</div>
-          ${status ? `<div class="status">Estado: ${esc(status)}</div>` : ""}
+          <div class="status">${esc(label)}${status ? " — " + esc(status) : ""}</div>
         </div>
       `;
     }).join("");
   }
 
-  async function loadGames() {
+  async function fetchJson(url, signal){
+    const res = await fetch(url, { cache:"no-store", signal });
+    const payload = await res.json();
+    if (!res.ok) throw new Error(`API ${res.status}: ${JSON.stringify(payload).slice(0,200)}`);
+    return payload;
+  }
+
+  async function loadGames(){
     btn.disabled = true;
-    setMeta("A carregar jogos…");
+    setMeta("A carregar…");
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
 
-    try {
-      const res = await fetch(API_URL, { cache: "no-store", signal: controller.signal });
-      const payload = await res.json();
+    try{
+      // 1) tenta LIVE
+      let payload = await fetchJson(API_LIVE, controller.signal);
+      let games = normalizeGames(payload);
 
-      if (!res.ok) {
-        console.error("API erro:", res.status, payload);
-        setMeta(`Erro API: ${res.status}`, "err");
-        renderMessage("Erro a pedir jogos. Vê o Console.", true);
+      if (games.length > 0){
+        setMeta(`LIVE — ${games.length} jogos.`, "ok");
+        renderGames(games, "LIVE");
         return;
       }
 
-      const games = normalizePayload(payload);
-      setMeta(`OK — ${games.length} jogos carregados.`, "ok");
-      renderGames(games);
-    } catch (e) {
+      // 2) se não houver live, tenta PRÓXIMOS
+      payload = await fetchJson(API_NEXT, controller.signal);
+      games = normalizeGames(payload);
+
+      if (games.length > 0){
+        setMeta(`PRÓXIMOS — ${games.length} jogos.`, "ok");
+        renderGames(games, "PRÓXIMOS");
+        return;
+      }
+
+      setMeta("Sem jogos agora.", "err");
+      renderMessage("Sem jogos AO VIVO e sem PRÓXIMOS no endpoint.", true);
+
+    } catch (e){
       console.error(e);
-      setMeta("Falha a pedir o API.", "err");
-      renderMessage(e?.name === "AbortError" ? "Timeout (15s)." : "Falha de rede/CORS/Worker.", true);
+      setMeta("Erro a pedir API.", "err");
+      renderMessage("Erro a pedir o API. Abre o Console/Network para ver.", true);
     } finally {
       clearTimeout(timeout);
       btn.disabled = false;
