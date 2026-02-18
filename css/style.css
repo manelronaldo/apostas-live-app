@@ -1,222 +1,274 @@
-<!doctype html>
-<html lang="pt">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Apostas Live</title>
+:root{
+  --bg:#07121f;
+  --panel:#0b1a2b;
+  --card:#0d2036;
+  --stroke:rgba(255,255,255,.08);
+  --txt:#eaf2ff;
+  --muted:rgba(234,242,255,.68);
+  --brand:#2b90ff;
+  --shadow: 0 20px 60px rgba(0,0,0,.35);
+  --radius:16px;
+}
 
-  <!-- ✅ CAMINHO CERTO (GitHub Pages) -->
-  <link rel="stylesheet" href="./css/style.css" />
-</head>
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+  background: radial-gradient(900px 500px at 15% -10%, rgba(43,144,255,.18), transparent 55%),
+              radial-gradient(900px 500px at 75% 0%, rgba(30,255,170,.10), transparent 60%),
+              var(--bg);
+  color:var(--txt);
+}
 
-<body>
-  <div class="app">
-    <header class="topbar">
-      <div class="brand">
-        <div class="logo">⚽</div>
-        <div class="brandText">
-          <div class="title">Apostas Live</div>
-          <div class="subtitle">Live + Próximos (API)</div>
-        </div>
-      </div>
+.topbar{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:18px 18px;
+  border-bottom:1px solid var(--stroke);
+  background: linear-gradient(180deg, rgba(10,22,36,.85), rgba(7,18,31,.65));
+  position:sticky; top:0; z-index:10;
+  backdrop-filter: blur(12px);
+}
 
-      <div class="topActions">
-        <button id="btnRefresh" class="btn primary">Atualizar</button>
-        <div class="segmented" role="tablist" aria-label="Modo">
-          <button id="tabLive" class="segBtn active" role="tab">AO VIVO</button>
-          <button id="tabUpcoming" class="segBtn" role="tab">PRÓXIMOS</button>
-        </div>
-      </div>
-    </header>
+.brand{display:flex; gap:12px; align-items:center}
+.logo{
+  width:42px;height:42px;border-radius:14px;
+  background: linear-gradient(135deg, rgba(43,144,255,.9), rgba(43,144,255,.2));
+  display:grid;place-items:center;
+  font-weight:800;
+  box-shadow: 0 10px 30px rgba(43,144,255,.25);
+}
+.title{font-weight:800; font-size:18px}
+.subtitle{color:var(--muted); font-size:12px}
 
-    <section class="controls">
-      <div class="controlRow">
-        <div class="pill">
-          <span class="dot ok"></span>
-          <span id="statusText">Pronto.</span>
-        </div>
+.tabs{display:flex; gap:10px; align-items:center}
+.tab{
+  border:1px solid var(--stroke);
+  background: rgba(255,255,255,.03);
+  color:var(--txt);
+  padding:10px 14px;
+  border-radius:999px;
+  cursor:pointer;
+}
+.tab.active{border-color: rgba(43,144,255,.4); box-shadow: 0 0 0 3px rgba(43,144,255,.12) inset}
 
-        <label class="control">
-          <span>Auto-refresh</span>
-          <div class="inline">
-            <input id="autoRefresh" type="checkbox" checked />
-            <select id="refreshEvery">
-              <option value="10">10s</option>
-              <option value="20" selected>20s</option>
-              <option value="30">30s</option>
-              <option value="60">60s</option>
-            </select>
-          </div>
-        </label>
+.actions{display:flex; gap:10px}
+.btn{
+  border:1px solid var(--stroke);
+  background: rgba(255,255,255,.06);
+  color:var(--txt);
+  padding:10px 14px;
+  border-radius:12px;
+  cursor:pointer;
+}
+.btn.ghost{background: transparent}
 
-        <label class="control">
-          <span>Pesquisar</span>
-          <input id="search" type="text" placeholder="liga / equipa / país..." />
-        </label>
+.layout{
+  display:grid;
+  grid-template-columns: 360px 1fr;
+  gap:16px;
+  padding:16px;
+}
 
-        <label class="control">
-          <span>Ordenar</span>
-          <select id="sortBy">
-            <option value="confidence">Confiança</option>
-            <option value="value">Value (edge)</option>
-            <option value="time">Hora</option>
-            <option value="league">Liga</option>
-          </select>
-        </label>
+.panel{
+  background: linear-gradient(180deg, rgba(11,26,43,.92), rgba(11,26,43,.72));
+  border:1px solid var(--stroke);
+  border-radius: var(--radius);
+  padding:16px;
+  box-shadow: var(--shadow);
+}
 
-        <label class="control">
-          <span>Min confiança</span>
-          <input id="minConfidence" type="range" min="0" max="100" value="35" />
-          <div class="tiny"><span id="minConfidenceText">35%</span></div>
-        </label>
+.panel h2{margin:0 0 14px 0; font-size:14px; letter-spacing:.8px; text-transform:uppercase; color:rgba(234,242,255,.75)}
 
-        <label class="control">
-          <span>Min value (edge)</span>
-          <input id="minEdge" type="range" min="-10" max="20" value="0" />
-          <div class="tiny"><span id="minEdgeText">0%</span></div>
-        </label>
-      </div>
+.row{display:flex; gap:10px; align-items:center; padding:10px 0}
+.switch{position:relative; width:46px; height:26px; display:inline-block}
+.switch input{display:none}
+.slider{
+  position:absolute; inset:0;
+  background: rgba(255,255,255,.08);
+  border:1px solid var(--stroke);
+  border-radius:999px;
+  cursor:pointer;
+}
+.slider:before{
+  content:"";
+  position:absolute; top:3px; left:3px;
+  width:20px; height:20px;
+  border-radius:999px;
+  background: rgba(234,242,255,.85);
+  transition: all .2s ease;
+}
+.switch input:checked + .slider{
+  background: rgba(43,144,255,.25);
+  border-color: rgba(43,144,255,.35);
+}
+.switch input:checked + .slider:before{
+  left:23px;
+  background: rgba(43,144,255,.95);
+}
 
-      <div class="controlRow">
-        <label class="control">
-          <span>API Base (Cloudflare Worker)</span>
-          <input id="apiBase" type="text" value="https://apostas-live-api.manelronaldo1.workers.dev" />
-          <div class="tiny muted">Ex: https://apostas-live-api.manelronaldo1.workers.dev</div>
-        </label>
+.switchText .switchTitle{font-weight:700}
+.switchText .switchSub{color:var(--muted); font-size:12px}
 
-        <label class="control">
-          <span>Password (se tiveres)</span>
-          <input id="apiPassword" type="password" placeholder="(opcional)" />
-          <div class="tiny muted">Se o Worker exigir, mete aqui.</div>
-        </label>
+.grid2{display:grid; grid-template-columns:1fr 1fr; gap:10px}
 
-        <div class="control">
-          <span>Mercado base</span>
-          <div class="chips" id="marketChips">
-            <button class="chip active" data-market="match_winner">1X2</button>
-            <button class="chip" data-market="over_under_25">Over/Under 2.5</button>
-            <button class="chip" data-market="btts">BTTS</button>
-          </div>
-          <div class="tiny muted">O “score” usa o mercado escolhido + comparação com a tua odd.</div>
-        </div>
-      </div>
-    </section>
+.field{margin:10px 0}
+.field label{display:flex; justify-content:space-between; align-items:center; font-size:12px; color:rgba(234,242,255,.75); margin-bottom:6px}
+.field input[type="text"], .field input[type="password"], .field select{
+  width:100%;
+  padding:10px 12px;
+  border-radius:12px;
+  border:1px solid var(--stroke);
+  background: rgba(255,255,255,.04);
+  color:var(--txt);
+  outline:none;
+}
+.field input[type="range"]{width:100%}
+.hint{margin-top:6px; font-size:12px; color:var(--muted)}
+.pill{
+  font-size:11px;
+  padding:4px 8px;
+  border-radius:999px;
+  border:1px solid var(--stroke);
+  background: rgba(255,255,255,.05);
+  color:rgba(234,242,255,.85);
+}
 
-    <main class="main">
-      <section class="left">
-        <div class="sectionHeader">
-          <div class="h">Jogos</div>
-          <div class="rightInfo">
-            <span class="badge" id="countBadge">0</span>
-            <button id="btnOnlyFav" class="btn ghost">⭐ Só favoritos</button>
-          </div>
-        </div>
+.segmented{display:flex; gap:8px}
+.seg{
+  flex:1;
+  padding:10px 10px;
+  border-radius:999px;
+  border:1px solid var(--stroke);
+  background: rgba(255,255,255,.04);
+  color:var(--txt);
+  cursor:pointer;
+  font-size:12px;
+}
+.seg.active{border-color: rgba(43,144,255,.45); box-shadow: 0 0 0 3px rgba(43,144,255,.12) inset}
 
-        <div id="gamesGrid" class="grid"></div>
+.footerInfo{
+  margin-top:12px;
+  padding-top:12px;
+  border-top:1px solid var(--stroke);
+  color:rgba(234,242,255,.8);
+}
+.tiny{font-size:12px; color:var(--muted); margin-top:6px}
 
-        <div id="emptyState" class="empty">
-          <div class="emptyTitle">Sem jogos para mostrar.</div>
-          <div class="emptyText">Pode não haver AO VIVO agora ou o filtro está demasiado apertado.</div>
-        </div>
-      </section>
+.content{
+  background: linear-gradient(180deg, rgba(11,26,43,.65), rgba(11,26,43,.35));
+  border:1px solid var(--stroke);
+  border-radius: var(--radius);
+  padding:16px;
+  box-shadow: var(--shadow);
+  min-height: 70vh;
+}
 
-      <aside class="right">
-        <div class="card">
-          <div class="cardHeader">
-            <div class="h">Múltiplas sugeridas</div>
-            <div class="tiny muted">Geradas por value + confiança (ajustável)</div>
-          </div>
+.contentHeader{
+  display:flex; align-items:center; justify-content:space-between;
+}
+.contentHeader h2{
+  margin:0;
+  font-size:14px;
+  letter-spacing:.8px;
+  text-transform:uppercase;
+  color:rgba(234,242,255,.75)
+}
+.days{
+  padding:10px 12px;
+  border-radius:12px;
+  border:1px solid var(--stroke);
+  background: rgba(255,255,255,.04);
+  color:var(--txt);
+}
 
-          <div class="row">
-            <label class="control mini">
-              <span>Perfil</span>
-              <select id="parlayProfile">
-                <option value="balanced" selected>Equilibrado</option>
-                <option value="safe">Mais seguro</option>
-                <option value="aggressive">Agressivo</option>
-              </select>
-            </label>
+.filtersRow{display:flex; gap:8px; margin:12px 0; flex-wrap:wrap}
+.chip{
+  padding:8px 12px;
+  border-radius:999px;
+  border:1px solid var(--stroke);
+  background: rgba(255,255,255,.04);
+  color:rgba(234,242,255,.9);
+  cursor:pointer;
+  font-size:12px;
+}
+.chip.active{border-color: rgba(43,144,255,.45); box-shadow: 0 0 0 3px rgba(43,144,255,.12) inset}
 
-            <label class="control mini">
-              <span>Nº jogos</span>
-              <select id="parlaySize">
-                <option value="2">2</option>
-                <option value="3" selected>3</option>
-                <option value="4">4</option>
-                <option value="5">5</option>
-              </select>
-            </label>
-          </div>
+.games{display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:12px}
+@media (max-width: 1100px){
+  .layout{grid-template-columns: 1fr}
+  .games{grid-template-columns: 1fr}
+}
 
-          <button id="btnGenerateParlay" class="btn primary full">Gerar Múltipla</button>
+.card{
+  background: linear-gradient(180deg, rgba(13,32,54,.92), rgba(13,32,54,.62));
+  border:1px solid var(--stroke);
+  border-radius: 16px;
+  padding:14px;
+  position:relative;
+  overflow:hidden;
+}
+.card:before{
+  content:"";
+  position:absolute; inset:-2px;
+  background: radial-gradient(450px 240px at 20% 0%, rgba(43,144,255,.16), transparent 55%);
+  pointer-events:none;
+}
+.cardTop{display:flex; justify-content:space-between; gap:12px; position:relative}
+.meta{color:var(--muted); font-size:12px}
+.teams{font-weight:800; margin:6px 0 2px}
+.badge{
+  font-size:11px;
+  padding:6px 10px;
+  border-radius:999px;
+  border:1px solid var(--stroke);
+  background: rgba(255,255,255,.04);
+  white-space:nowrap;
+  height:fit-content;
+}
+.levelTop{border-color: rgba(43,144,255,.45); box-shadow: 0 0 0 3px rgba(43,144,255,.12) inset}
+.levelGood{border-color: rgba(43,255,170,.35); box-shadow: 0 0 0 3px rgba(43,255,170,.10) inset}
+.levelMid{border-color: rgba(255,210,80,.35); box-shadow: 0 0 0 3px rgba(255,210,80,.10) inset}
+.levelBad{border-color: rgba(255,90,90,.35); box-shadow: 0 0 0 3px rgba(255,90,90,.10) inset}
 
-          <div id="parlayBox" class="parlayBox">
-            <div class="tiny muted">Ainda não geraste uma múltipla.</div>
-          </div>
-        </div>
+.cardBottom{display:flex; justify-content:space-between; align-items:center; margin-top:10px; position:relative}
+.kpis{display:flex; gap:10px; flex-wrap:wrap}
+.kpi{font-size:12px; color:rgba(234,242,255,.85)}
+.kpi b{color:var(--txt)}
+.smallBtn{
+  padding:8px 10px;
+  border-radius:12px;
+  border:1px solid var(--stroke);
+  background: rgba(255,255,255,.05);
+  color:var(--txt);
+  cursor:pointer;
+  font-size:12px;
+}
 
-        <div class="card">
-          <div class="cardHeader">
-            <div class="h">Painel</div>
-          </div>
+.empty{
+  padding:16px;
+  border:1px dashed rgba(255,255,255,.15);
+  border-radius:16px;
+  color:var(--muted);
+  margin-top:12px;
+}
+.hidden{display:none}
 
-          <div class="panel">
-            <div class="panelRow">
-              <div class="k">Modo</div>
-              <div class="v" id="modeText">AO VIVO</div>
-            </div>
-            <div class="panelRow">
-              <div class="k">Última atualização</div>
-              <div class="v" id="lastUpdate">—</div>
-            </div>
-            <div class="panelRow">
-              <div class="k">Auto-refresh</div>
-              <div class="v" id="autoText">Ligado</div>
-            </div>
-            <div class="panelRow">
-              <div class="k">Mercado</div>
-              <div class="v" id="marketText">1X2</div>
-            </div>
-            <div class="panelRow">
-              <div class="k">Endpoint</div>
-              <div class="v mono" id="endpointText">/jogos</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="cardHeader">
-            <div class="h">Notas</div>
-          </div>
-          <div class="notes">
-            <div class="tiny muted">
-              • Cores: <b>azul</b>=top, <b>verde</b>=boa, <b>amarelo</b>=média, <b>vermelho</b>=fraca.<br/>
-              • “Value (edge)” compara a tua odd com a odd do mercado (API) e dá prioridade quando há vantagem.<br/>
-              • O botão <b>Porquê</b> explica o cálculo.
-            </div>
-          </div>
-        </div>
-      </aside>
-    </main>
-  </div>
-
-  <!-- MODAL: Detalhe / Porquê -->
-  <div id="modal" class="modal hidden" aria-hidden="true">
-    <div class="modalBackdrop" id="modalClose"></div>
-    <div class="modalCard">
-      <div class="modalHeader">
-        <div class="h" id="modalTitle">Detalhes</div>
-        <button class="btn ghost" id="modalX">Fechar</button>
-      </div>
-      <div class="modalBody" id="modalBody"></div>
-      <div class="modalFooter">
-        <button class="btn ghost" id="btnCopy">Copiar resumo</button>
-        <button class="btn primary" id="modalOk">OK</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ✅ CAMINHO CERTO (GitHub Pages) -->
-  <script src="./js/app.js"></script>
-</body>
-</html>
+.modal{
+  position:fixed; inset:0;
+  background: rgba(0,0,0,.55);
+  display:grid; place-items:center;
+  z-index:50;
+}
+.modalBox{
+  width:min(720px, 92vw);
+  background: linear-gradient(180deg, rgba(11,26,43,.95), rgba(11,26,43,.85));
+  border:1px solid rgba(255,255,255,.10);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+  padding:14px;
+}
+.modalTop{display:flex; justify-content:space-between; align-items:center; gap:10px}
+.modalTitle{font-weight:900}
+.modalSub{color:var(--muted); font-size:12px}
+.modalBody{margin-top:10px; color:rgba(234,242,255,.9); line-height:1.45}
