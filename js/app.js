@@ -758,7 +758,39 @@ minEdgeElText.textContent = `${minEdgeEl.value}%`;
     $("minEdgeText").textContent = `${$("minEdge").value}%`;
 
     $("minConfidence").addEventListener("input", () => {
-      $("minConfidenceText").textContent = `${$"minConfidence".value}%`;
+    const minConfidenceEl = document.getElementById("minConfidence");
+const minEdgeEl = document.getElementById("minEdge");
+
+const minConfidenceTextEl = document.getElementById("minConfidenceText");
+const minEdgeTextEl = document.getElementById("minEdgeText");
+
+function updateSlidersText() {
+  if (minConfidenceTextEl && minConfidenceEl) {
+    minConfidenceTextEl.textContent = `${minConfidenceEl.value}%`;
+  }
+  if (minEdgeTextEl && minEdgeEl) {
+    minEdgeTextEl.textContent = `${minEdgeEl.value}%`;
+  }
+}
+
+if (minConfidenceEl) {
+  minConfidenceEl.addEventListener("input", () => {
+    updateSlidersText();
+    saveToStorage?.();
+    render?.();
+  });
+}
+
+if (minEdgeEl) {
+  minEdgeEl.addEventListener("input", () => {
+    updateSlidersText();
+    saveToStorage?.();
+    render?.();
+  });
+}
+
+updateSlidersText();
+
       saveStorage();
       render();
     });
