@@ -745,7 +745,16 @@
     loadStorage();
 
     // sliders text
-    $("minConfidenceText").textContent = `${$("minConfidence").value}%`;
+     const minConfidenceEl = document.getElementById("minConfidence") || document.getElementById("minConf");
+const minEdgeEl = document.getElementById("minEdge") || document.getElementById("minValue") || document.getElementById("edge");
+
+if (!minConfidenceEl || !minEdgeEl) {
+  throw new Error("Faltam inputs minConfidence/minEdge no HTML (IDs não encontrados).");
+}
+
+minConfidenceElText.textContent = `${minConfidenceEl.value}%`;
+minEdgeElText.textContent = `${minEdgeEl.value}%`;
+
     $("minEdgeText").textContent = `${$("minEdge").value}%`;
 
     $("minConfidence").addEventListener("input", () => {
