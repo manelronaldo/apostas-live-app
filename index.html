@@ -1,55 +1,41 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="pt">
 <head>
-<meta charset="UTF-8">
-<title>Apostas Live</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Apostas Live</title>
+  <style>
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;background:#071a2a;color:#fff}
+    header{padding:18px 20px;background:linear-gradient(180deg,#0a2a44, #061626)}
+    h1{margin:0;font-size:28px;display:flex;gap:10px;align-items:center}
+    main{padding:16px 20px}
+    button{background:#1e6fff;color:#fff;border:0;border-radius:10px;padding:10px 14px;font-weight:700;cursor:pointer}
+    button:disabled{opacity:.6;cursor:not-allowed}
+    .meta{opacity:.8;margin:10px 0 14px}
+    .card{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:12px 12px;margin:10px 0}
+    .row{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+    .league{font-weight:800}
+    .time{opacity:.8}
+    .teams{margin-top:6px;font-size:16px}
+    .status{margin-top:6px;opacity:.9;font-size:13px}
+    .err{background:rgba(255,0,0,.12);border:1px solid rgba(255,0,0,.25)}
+    .ok{background:rgba(0,255,120,.08);border:1px solid rgba(0,255,120,.18)}
+    .pill{font-size:12px;opacity:.85;padding:4px 8px;border-radius:999px;background:rgba(255,255,255,.08)}
+  </style>
 
-<style>
-body{
-  background:#071427;
-  color:#fff;
-  font-family:Arial;
-  margin:0;
-}
-
-header{
-  padding:20px;
-  background:#0b1f3a;
-  font-size:22px;
-  font-weight:bold;
-}
-
-button{
-  padding:10px 16px;
-  border:none;
-  border-radius:6px;
-  background:#2d7cff;
-  color:#fff;
-  cursor:pointer;
-  margin:20px;
-}
-
-#games{
-  padding:20px;
-}
-
-.game{
-  background:#0e223f;
-  padding:18px;
-  margin-bottom:15px;
-  border-radius:10px;
-}
-</style>
-
+  <!-- IMPORTANTE: defer para garantir que o DOM já existe -->
+  <script src="./app.js" defer></script>
 </head>
+
 <body>
+  <header>
+    <h1>⚽ Apostas Live</h1>
+  </header>
 
-<header>⚽ Apostas Live</header>
-
-<button onclick="loadGames()">Atualizar Jogos</button>
-
-<div id="games"></div>
-
-<script src="js/app.js"></script>
+  <main>
+    <button id="btnRefresh">Atualizar Jogos</button>
+    <div class="meta" id="meta"></div>
+    <div id="games"></div>
+  </main>
 </body>
 </html>
