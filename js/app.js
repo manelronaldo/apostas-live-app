@@ -1,4 +1,5 @@
 (() => {
+  // Teu Worker/API
   const API_URL = "https://apostas-live-api.manelronaldo1.workers.dev/";
 
   const btn = document.getElementById("btnRefresh");
@@ -19,19 +20,17 @@
     meta.className = "meta" + (type ? " " + type : "");
   }
 
-  function renderEmpty(msg) {
-    gamesEl.innerHTML = `<div class="card err">${esc(msg)}</div>`;
+  function renderMessage(msg, isError = false) {
+    gamesEl.innerHTML = `<div class="card ${isError ? "err" : ""}">${esc(msg)}</div>`;
   }
 
-  // Tenta apanhar vários formatos possíveis do teu Worker:
-  // - { games: [...] }
-  // - { data: [...] }
-  // - [...] direto
+  // Suporta vários formatos que o Worker pode devolver
   function normalizePayload(payload) {
     if (Array.isArray(payload)) return payload;
     if (payload && Array.isArray(payload.games)) return payload.games;
     if (payload && Array.isArray(payload.data)) return payload.data;
     if (payload && Array.isArray(payload.events)) return payload.events;
+    if (payload && Array.isArray(payload.matches)) return payload.matches;
     return [];
   }
 
@@ -44,11 +43,11 @@
 
   function renderGames(list) {
     if (!list.length) {
-      renderEmpty("Não veio nenhum jogo do API (lista vazia).");
+      renderMessage("O API respondeu mas veio lista vazia (0 jogos).", true);
       return;
     }
 
-    // ordena por hora (se existir)
+    // tentar ordenar por data/hora
     list.sort((a, b) => {
       const ta = Date.parse(getField(a, ["startTime", "start", "date", "kickoff", "time"], "")) || 0;
       const tb = Date.parse(getField(b, ["startTime", "start", "date", "kickoff", "time"], "")) || 0;
@@ -76,12 +75,14 @@
         <div class="card">
           <div class="row">
             <div class="league">${esc(league)}</div>
-            <div class="row" style="gap:8px;align-items:center">
+            <div class="row" style="align-items:center;gap:8px">
               <div class="time">${esc(time || "")}</div>
               ${score}
             </div>
           </div>
+
           <div class="teams">${esc(home)} <b>vs</b> ${esc(away)}</div>
+
           ${status ? `<div class="status">Estado: ${esc(status)}</div>` : ""}
         </div>
       `;
@@ -96,7 +97,6 @@
     const timeout = setTimeout(() => controller.abort(), 15000);
 
     try {
-      // cache: "no-store" para evitar GitHub Pages / browser cache em testes
       const res = await fetch(API_URL, {
         method: "GET",
         cache: "no-store",
@@ -105,17 +105,20 @@
 
       const text = await res.text();
       let payload;
+
       try {
         payload = JSON.parse(text);
       } catch {
         console.error("Resposta não é JSON:", text);
-        renderEmpty("O API respondeu, mas não veio JSON válido. Vê o Console.");
+        setMeta("Erro: API não devolveu JSON.", "err");
+        renderMessage("O API respondeu, mas não veio JSON válido. Vê o Console.", true);
         return;
       }
 
       if (!res.ok) {
         console.error("API erro:", res.status, payload);
-        renderEmpty(`API respondeu erro ${res.status}. Vê o Console.`);
+        setMeta(`Erro do API: ${res.status}`, "err");
+        renderMessage(`API respondeu erro ${res.status}. Vê o Console.`, true);
         return;
       }
 
@@ -128,10 +131,12 @@
       renderGames(games);
     } catch (err) {
       console.error("Falha no fetch:", err);
-      renderEmpty(
+      setMeta("Falha a pedir o API.", "err");
+      renderMessage(
         err?.name === "AbortError"
           ? "Timeout a pedir o API (15s)."
-          : "Falha a pedir o API. Vê o Console (CORS / rede / Worker)."
+          : "Falha a pedir o API (CORS / rede / Worker). Vê o Console.",
+        true
       );
     } finally {
       clearTimeout(timeout);
@@ -139,9 +144,6 @@
     }
   }
 
-  // liga o botão sem onclick no HTML (evita ReferenceError)
   btn.addEventListener("click", loadGames);
-
-  // carrega logo ao abrir
   loadGames();
 })();
