@@ -749,7 +749,7 @@
     $("minEdgeText").textContent = `${$("minEdge").value}%`;
 
     $("minConfidence").addEventListener("input", () => {
-      $("minConfidenceText").textContent = `${$("minConfidence").value}%`;
+      $("minConfidenceText").textContent = `${$"minConfidence".value}%`;
       saveStorage();
       render();
     });
@@ -800,4 +800,3 @@
   }
 
   init();
-})();
