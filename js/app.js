@@ -1,836 +1,444 @@
-/* Apostas Live - Frontend Avançado
-   - Live + Próximos
-   - Auto refresh
-   - Odds + comparação com odd da casa
-   - Cores (azul/verde/amarelo/vermelho)
-   - Botão "Porquê" (explica score)
-   - Favoritos
-   - Múltiplas sugeridas
+/* Apostas Live - versão estável (sem crash)
+   - Render cards
+   - Filtros e auto refresh
+   - Modal "Porque?"
 */
 
-(() => {
-  // =========================
-  // Config / Estado
-  // =========================
-  const $ = (id) => document.getElementById(id);
+const $ = (id) => document.getElementById(id);
+const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
-  const state = {
-    mode: "live", // live | upcoming
-    market: "match_winner", // match_winner | over_under_25 | btts
-    onlyFav: false,
-    favorites: new Set(),
-    games: [],
-    lastFetchAt: null,
-    timer: null,
-    lastParlay: null,
-  };
+const state = {
+  mode: "live",       // "live" | "next"
+  market: "1x2",      // "1x2" | "ou25" | "btts"
+  level: "all",       // all | top | good | mid | bad
+  timer: null,
+  games: [],
+};
 
-  const STORAGE_KEY = "apostas_live_v2";
-  function loadStorage() {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return;
-      const data = JSON.parse(raw);
-      if (data?.favorites?.length) state.favorites = new Set(data.favorites);
-      if (data?.apiBase) $("apiBase").value = data.apiBase;
-      if (data?.apiPassword) $("apiPassword").value = data.apiPassword;
-      if (data?.market) setMarket(data.market);
-      if (typeof data?.minConfidence === "number") $("minConfidence").value = String(data.minConfidence);
-      if (typeof data?.minEdge === "number") $("minEdge").value = String(data.minEdge);
-      if (typeof data?.autoRefresh === "boolean") $("autoRefresh").checked = data.autoRefresh;
-      if (data?.refreshEvery) $("refreshEvery").value = String(data.refreshEvery);
-    } catch {}
+function nowStr() {
+  const d = new Date();
+  return d.toLocaleString();
+}
+
+function storageGet(key, fallback) {
+  try {
+    const v = localStorage.getItem(key);
+    return v == null ? fallback : v;
+  } catch { return fallback; }
+}
+function storageSet(key, value) {
+  try { localStorage.setItem(key, value); } catch {}
+}
+
+function setStatus(text) {
+  const el = $("statusLine");
+  if (el) el.textContent = text;
+}
+function setLastUpdate() {
+  const el = $("lastUpdate");
+  if (el) el.textContent = nowStr();
+}
+
+function apiBase() {
+  const v = ($("apiBase")?.value || "").trim();
+  return v.replace(/\/+$/, "");
+}
+
+function apiHeaders() {
+  const h = { "Accept": "application/json" };
+  const pass = ($("apiPass")?.value || "").trim();
+  if (pass) h["X-Password"] = pass;
+  return h;
+}
+
+function clamp(n, a, b) { return Math.max(a, Math.min(b, n)); }
+
+function computeConfidence(game) {
+  // Se o worker já trouxer "confidence" usa; se não, cria algo simples
+  const c = Number(game.confidence ?? game.conf ?? game.score_confidence ?? 0);
+  if (!Number.isFinite(c) || c <= 0) {
+    // fallback: usa um valor suave para não dar 0 sempre
+    return 50;
   }
-  function saveStorage() {
-    try {
-      const data = {
-        favorites: Array.from(state.favorites),
-        apiBase: $("apiBase").value.trim(),
-        apiPassword: $("apiPassword").value || "",
-        market: state.market,
-        minConfidence: Number($("minConfidence").value),
-        minEdge: Number($("minEdge").value),
-        autoRefresh: $("autoRefresh").checked,
-        refreshEvery: Number($("refreshEvery").value),
-      };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    } catch {}
-  }
+  return clamp(c, 0, 100);
+}
 
-  // =========================
-  // UI helpers
-  // =========================
-  function setStatus(text, kind = "ok") {
-    $("statusText").textContent = text;
-    const dot = document.querySelector(".pill .dot");
-    dot.classList.remove("ok", "warn", "bad");
-    dot.classList.add(kind);
-  }
+function computeEdge(game) {
+  // Se já houver edge/value usa; se não, 0.
+  const e = Number(game.edge ?? game.value ?? game.value_edge ?? 0);
+  return Number.isFinite(e) ? e : 0;
+}
 
-  function fmtTime(dateStr, timeStr) {
-    if (!dateStr && !timeStr) return "—";
-    // date vem tipo "18/02/2026" e time "19:00"
-    return `${dateStr || ""}${dateStr && timeStr ? ", " : ""}${timeStr || ""}`.trim();
-  }
+function levelFrom(conf) {
+  if (conf >= 80) return "top";
+  if (conf >= 65) return "good";
+  if (conf >= 50) return "mid";
+  return "bad";
+}
 
-  function safeNum(x) {
-    const n = Number(x);
-    return Number.isFinite(n) ? n : null;
-  }
+function levelClass(level) {
+  if (level === "top") return "levelTop";
+  if (level === "good") return "levelGood";
+  if (level === "mid") return "levelMid";
+  return "levelBad";
+}
 
-  function round2(x) {
-    return Math.round(x * 100) / 100;
-  }
+function normalizeGames(payload) {
+  // Aceita formatos:
+  // { payload: { results: [...] } }
+  // { results: [...] }
+  // ou Soccerdata "results" com ligas->stages->matches (raw)
+  const raw = payload?.payload?.results ?? payload?.results ?? payload?.payload ?? payload;
 
-  function pct(x) {
-    return `${Math.round(x)}%`;
-  }
-
-  // =========================
-  // Mercado / odds parsing
-  // =========================
-  function extractMarketOdds(match, market) {
-    // Soccerdata: match.odds.match_winner.home/draw/away
-    // Soccerdata: match.odds.over_under.total/over/under
-    // Nem sempre existe -> fallback null
-    const odds = match?.odds || {};
-    if (market === "match_winner") {
-      const mw = odds.match_winner || {};
-      const home = safeNum(mw.home);
-      const draw = safeNum(mw.draw);
-      const away = safeNum(mw.away);
-      return {
-        key: "1X2",
-        picks: [
-          { code: "1", label: "Casa", odd: home },
-          { code: "X", label: "Empate", odd: draw },
-          { code: "2", label: "Fora", odd: away },
-        ],
-      };
-    }
-
-    if (market === "over_under_25") {
-      const ou = odds.over_under || {};
-      const total = safeNum(ou.total);
-      // queremos 2.5; se API já trouxer total 2.5 ok, senão usamos o que houver
-      const over = safeNum(ou.over);
-      const under = safeNum(ou.under);
-      return {
-        key: `O/U ${total ?? 2.5}`,
-        picks: [
-          { code: "O", label: `Over ${total ?? 2.5}`, odd: over },
-          { code: "U", label: `Under ${total ?? 2.5}`, odd: under },
-          { code: "-", label: "—", odd: null },
-        ],
-      };
-    }
-
-    if (market === "btts") {
-      // soccerdata pode não ter btts. Se não tiver, devolve nulls.
-      const btts = odds.btts || odds.both_teams_to_score || {};
-      const yes = safeNum(btts.yes);
-      const no = safeNum(btts.no);
-      return {
-        key: "BTTS",
-        picks: [
-          { code: "Y", label: "Sim", odd: yes },
-          { code: "N", label: "Não", odd: no },
-          { code: "-", label: "—", odd: null },
-        ],
-      };
-    }
-
-    return { key: "—", picks: [] };
+  if (Array.isArray(raw)) {
+    // Já vem lista de jogos "flat"
+    return raw.map((g) => ({
+      id: g.id ?? g.match_id ?? `${g.home}-${g.away}-${g.time ?? ""}`,
+      league: g.league_name ?? g.league ?? "—",
+      country: g.country?.name ?? g.country ?? "",
+      time: g.time ?? g.kickoff ?? g.date_time ?? g.date ?? "",
+      date: g.date ?? "",
+      home: g.home?.name ?? g.teams?.home?.name ?? g.home ?? "Casa",
+      away: g.away?.name ?? g.teams?.away?.name ?? g.away ?? "Fora",
+      status: g.status ?? g.match_status ?? "—",
+      minute: g.minute ?? g.time_minute ?? null,
+      confidence: g.confidence ?? g.conf ?? null,
+      edge: g.edge ?? g.value ?? null,
+      raw: g,
+    }));
   }
 
-  function bestPickFromMarket(marketBlock) {
-    // Escolhe a odd "mais interessante" pelo menor preço? (Mais provável)
-    // Para betting value, muitas vezes o ideal é comparar contra tua odd.
-    // Aqui escolhemos o pick com maior "probabilidade implícita" (odd menor) se existir.
-    const picks = (marketBlock?.picks || []).filter(p => Number.isFinite(p.odd));
-    if (!picks.length) return null;
-    picks.sort((a,b) => a.odd - b.odd); // menor odd = mais provável
-    return picks[0];
-  }
-
-  // =========================
-  // Score: confiança + value
-  // =========================
-  function computeScore(match, market, userBookOdd) {
-    const block = extractMarketOdds(match, market);
-    const pick = bestPickFromMarket(block);
-
-    // Se não houver odds -> confiança baixa
-    if (!pick?.odd) {
-      return {
-        confidence: 20,
-        edgePct: -999,
-        grade: "red",
-        reason: [
-          "Não há odds disponíveis no payload da API para este mercado.",
-          "Sem odds → não dá para calcular value → confiança reduzida."
-        ],
-        marketBlock: block,
-        pick,
-      };
-    }
-
-    const apiOdd = pick.odd;
-    const implied = 1 / apiOdd; // prob. implícita
-    // "Model": heurística simples (não invento estatística que não tenho):
-    // Ajuste por estado do jogo (live) e minuto/estado
-    const status = (match?.status || "").toLowerCase();
-    const minute = safeNum(match?.minute);
-    let modelProb = implied;
-
-    // Heurísticas leves:
-    // - Se ao vivo e já vai avançado, mercados "mais prováveis" ganham confiança ligeira
-    if (status.includes("live") || status.includes("inplay") || status.includes("playing")) {
-      if (Number.isFinite(minute)) {
-        const t = Math.min(Math.max(minute, 0), 90);
-        modelProb = implied * (1 + (t / 180)); // até +50% no máximo (muito suave)
-      } else {
-        modelProb = implied * 1.1;
-      }
-    } else if (status.includes("upcoming") || status.includes("pre") || status.includes("not started")) {
-      modelProb = implied * 1.0;
-    } else {
-      modelProb = implied * 1.0;
-    }
-
-    // Clamp prob
-    modelProb = Math.min(Math.max(modelProb, 0.02), 0.92);
-
-    // Edge: comparação com a tua odd (se meter)
-    let edgePct = null;
-    let usedBook = false;
-    const bookOdd = safeNum(userBookOdd);
-    if (bookOdd && bookOdd > 1.01) {
-      // edge = (prob_model * odd_book - 1)
-      const edge = (modelProb * bookOdd) - 1;
-      edgePct = edge * 100;
-      usedBook = true;
-    } else {
-      // sem tua odd: avaliamos "value" só por robustez do mercado (odd baixa = mais provável)
-      // isto não é value real — é um proxy para ordenar.
-      edgePct = (modelProb - implied) * 100;
-    }
-
-    // Confiança: mistura (probabilidade + edge)
-    // base em prob
-    let confidence = (modelProb * 100);
-    // reforço por edge
-    confidence += Math.max(-10, Math.min(15, edgePct));
-    // penalização se odds muito altas (muito volátil)
-    confidence -= Math.max(0, (apiOdd - 2.2) * 7);
-    // clamp
-    confidence = Math.round(Math.min(Math.max(confidence, 0), 100));
-
-    // Grade por cor
-    let grade = "red";
-    if (confidence >= 80) grade = "blue";
-    else if (confidence >= 65) grade = "green";
-    else if (confidence >= 45) grade = "yellow";
-
-    const reason = [];
-    reason.push(`Mercado: ${block.key} | Pick mais provável: ${pick.label} (odd API ${apiOdd}).`);
-    reason.push(`Prob. implícita (API): ${Math.round(implied*100)}%. Prob. ajustada (heurística): ${Math.round(modelProb*100)}%.`);
-    if (usedBook) {
-      reason.push(`Tua odd: ${bookOdd}. Edge estimado: ${round2(edgePct)}% (valor > 0 é vantagem).`);
-    } else {
-      reason.push(`Sem tua odd → Edge é só um proxy (diferença entre prob. ajustada e implícita).`);
-    }
-    reason.push(`Confiança final: ${confidence}% (mistura de probabilidade + edge, com penalização de odds altas).`);
-    reason.push(`Nota: isto é um score heurístico. Se quiseres “modelo real”, temos de ter métricas (cantos, remates, xG, etc.) no endpoint.`);
-
-    return { confidence, edgePct, grade, reason, marketBlock: block, pick };
-  }
-
-  // =========================
-  // Normalização do payload do Worker
-  // =========================
-  function normalizeWorkerPayload(payload, mode) {
-    // Worker pode devolver:
-    // /jogos -> {status:"OK",count:n,games:[{league,homeTeam,awayTeam,startTime,status,...}]}
-    // ou /jogos?debug=1 -> {status:"OK_RAW", payload:[{ league_id, league_name, matches:[...] }]}
-    // ou /proximos -> parecido
-    // Vamos suportar os dois.
-
-    // Caso A: raw
-    if (payload?.status === "OK_RAW" && payload?.payload) {
-      const arr = payload.payload; // no teu print: payload: {count, results:[...]} ou array
-      // Já vi prints teus com: payload: { count:3, results:[{league_id,...,matches:[...]}, ...] }
-      if (Array.isArray(arr)) {
-        return flattenRaw(arr, mode);
-      }
-      if (arr?.results && Array.isArray(arr.results)) {
-        return flattenRaw(arr.results, mode);
-      }
-      return [];
-    }
-
-    // Caso B: simplified
-    if (payload?.status === "OK" && Array.isArray(payload.games)) {
-      // Aqui pode faltar odds e ids. Então tratamos como “cards simples”.
-      return payload.games.map((g, idx) => ({
-        id: g.rawId || `simple_${mode}_${idx}`,
-        league: g.league || "—",
-        country: g.country || "",
-        home: g.homeTeam || "—",
-        away: g.awayTeam || "—",
-        date: g.date || "",
-        time: g.startTime || "",
-        status: g.status || (mode === "live" ? "live" : "upcoming"),
-        minute: safeNum(g.minute),
-        goals: {
-          home: safeNum(g.homeScore),
-          away: safeNum(g.awayScore),
-        },
-        odds: g.odds || {},
-        raw: g,
-      }));
-    }
-
-    // Caso C: upstream errors encapsulados
-    if (payload?.error || payload?.status === "ERROR") {
-      throw new Error(payload?.error || "Erro no endpoint");
-    }
-
+  // Caso raw tipo Soccerdata: [{league_id,... stage:[{matches:[...]}]}]
+  if (Array.isArray(payload?.payload?.results)) {
+    // já tratado acima
     return [];
   }
 
-  function flattenRaw(results, mode) {
-    // results: [{league_id,league_name, country, matches:[{...}]}]
+  if (Array.isArray(payload?.payload?.results) === false && Array.isArray(payload?.payload) === true) {
+    // ignore
+  }
+
+  // Detecta formato soccerdata "OK_RAW" que vem tipo:
+  // payload: { results: [ { league_name, country, stage:[ { matches:[...] } ] } ] }
+  const leagues = payload?.payload?.results;
+  if (Array.isArray(leagues)) {
     const out = [];
-    for (const leagueBlock of results) {
-      const leagueName = leagueBlock.league_name || leagueBlock.league || "—";
-      const countryName = leagueBlock?.country?.name || leagueBlock?.country || "";
-      const matches = leagueBlock.matches || [];
-      for (const m of matches) {
-        out.push({
-          id: m.id ?? `${leagueName}_${m?.teams?.home?.id}_${m?.teams?.away?.id}_${m?.date}_${m?.time}`,
-          league: leagueName,
-          country: countryName,
-          home: m?.teams?.home?.name || "—",
-          away: m?.teams?.away?.name || "—",
-          date: m?.date || "",
-          time: m?.time || "",
-          status: m?.status || (mode === "live" ? "live" : "upcoming"),
-          minute: safeNum(m?.minute),
-          stadium: m?.stadium?.name || "",
-          goals: {
-            home: safeNum(m?.goals?.home_ft_goals ?? m?.goals?.home_ht_goals ?? m?.goals?.home),
-            away: safeNum(m?.goals?.away_ft_goals ?? m?.goals?.away_ht_goals ?? m?.goals?.away),
-            homeHT: safeNum(m?.goals?.home_ht_goals),
-            awayHT: safeNum(m?.goals?.away_ht_goals),
-            homeFT: safeNum(m?.goals?.home_ft_goals),
-            awayFT: safeNum(m?.goals?.away_ft_goals),
-          },
-          odds: m?.odds || {},
-          events: Array.isArray(m?.events) ? m.events : [],
-          lineups: m?.lineups || null,
-          raw: m,
-          rawLeague: leagueBlock,
-        });
+    for (const L of leagues) {
+      const league = L.league_name ?? "—";
+      const country = L.country?.name ?? "";
+      const stages = Array.isArray(L.stage) ? L.stage : [];
+      for (const S of stages) {
+        const matches = Array.isArray(S.matches) ? S.matches : [];
+        for (const M of matches) {
+          out.push({
+            id: M.id,
+            league,
+            country,
+            date: M.date ?? "",
+            time: M.time ?? "",
+            home: M.teams?.home?.name ?? "Casa",
+            away: M.teams?.away?.name ?? "Fora",
+            status: M.status ?? "—",
+            minute: M.minute ?? null,
+            confidence: null,
+            edge: null,
+            raw: M
+          });
+        }
       }
     }
     return out;
   }
 
-  // =========================
-  // Fetch
-  // =========================
-  async function fetchJson(url, password) {
-    const headers = {
-      "Accept": "application/json",
-    };
-    // Se o teu Worker exigir password por header, usamos X-APP-PASSWORD
-    if (password) headers["X-APP-PASSWORD"] = password;
+  return [];
+}
 
-    const res = await fetch(url, { headers, method: "GET" });
-    const text = await res.text();
-    let data;
-    try { data = JSON.parse(text); } catch { data = { error: "Resposta não é JSON", raw: text }; }
-    if (!res.ok) {
-      const msg = data?.error || data?.detail || `HTTP ${res.status}`;
-      throw new Error(msg);
-    }
-    return data;
+async function fetchGames() {
+  const base = apiBase();
+  if (!base) {
+    setStatus("Mete o API Base (workers.dev).");
+    return [];
   }
 
-  async function loadGames() {
-    const base = $("apiBase").value.trim().replace(/\/+$/, "");
-    const pass = $("apiPassword").value || "";
+  const days = Number($("days")?.value || 3);
+  const endpoint = state.mode === "live" ? "/jogos" : "/jogos"; // mais estável
+  const url = new URL(base + endpoint);
+  if (state.mode !== "live") url.searchParams.set("days", String(days));
+  url.searchParams.set("debug", "0");
 
-    if (!base) {
-      setStatus("Mete o API Base do Worker.", "warn");
-      return;
-    }
+  setStatus("A carregar…");
 
-    const endpoint = state.mode === "live" ? "/jogos" : "/proximos";
-    $("endpointText").textContent = endpoint;
+  const r = await fetch(url.toString(), { headers: apiHeaders() });
+  if (!r.ok) {
+    const t = await r.text().catch(() => "");
+    throw new Error(`API ${r.status}: ${t.slice(0,200)}`);
+  }
+  const j = await r.json();
+  const games = normalizeGames(j);
 
-    const url = `${base}${endpoint}?debug=1`; // debug=1 ajuda sempre (traz odds + ids)
-    setStatus("A carregar...", "warn");
+  setLastUpdate();
+  setStatus(`OK — ${games.length} jogos carregados.`);
+  return games;
+}
 
-    try {
-      const payload = await fetchJson(url, pass);
-      const list = normalizeWorkerPayload(payload, state.mode);
+function applyFilters(games) {
+  const q = ($("search")?.value || "").trim().toLowerCase();
+  const minConf = Number($("minConfidence")?.value || 0);
+  const minEdge = Number($("minEdge")?.value || 0);
+  const sortBy = ($("sortBy")?.value || "confidence");
 
-      state.games = list;
-      state.lastFetchAt = new Date();
-      $("lastUpdate").textContent = state.lastFetchAt.toLocaleString();
-      setStatus(`OK — ${list.length} jogos carregados.`, "ok");
-      render();
-    } catch (e) {
-      console.error(e);
-      setStatus(`Erro: ${e.message}`, "bad");
-      state.games = [];
-      render();
-    } finally {
-      saveStorage();
-    }
+  let out = games.map(g => {
+    const confidence = computeConfidence(g);
+    const edge = computeEdge(g);
+    const level = levelFrom(confidence);
+    return { ...g, confidence, edge, level };
+  });
+
+  if (q) {
+    out = out.filter(g =>
+      `${g.league} ${g.country} ${g.home} ${g.away}`.toLowerCase().includes(q)
+    );
   }
 
-  // =========================
-  // Render
-  // =========================
-  function render() {
-    const grid = $("gamesGrid");
-    grid.innerHTML = "";
+  out = out.filter(g => g.confidence >= minConf && g.edge >= minEdge);
 
-    const q = $("search").value.trim().toLowerCase();
-    const minConf = Number($("minConfidence").value);
-    const minEdge = Number($("minEdge").value);
+  if (state.level !== "all") out = out.filter(g => g.level === state.level);
 
-    let items = state.games.slice();
+  out.sort((a,b) => {
+    if (sortBy === "edge") return (b.edge - a.edge) || (b.confidence - a.confidence);
+    if (sortBy === "time") return String(a.date + " " + a.time).localeCompare(String(b.date + " " + b.time));
+    return (b.confidence - a.confidence) || (b.edge - a.edge);
+  });
 
-    // favoritos
-    if (state.onlyFav) {
-      items = items.filter(g => state.favorites.has(String(g.id)));
-    }
+  return out;
+}
 
-    // search
-    if (q) {
-      items = items.filter(g => {
-        const hay = `${g.league} ${g.country} ${g.home} ${g.away}`.toLowerCase();
-        return hay.includes(q);
-      });
-    }
+function scoreBadge(g) {
+  const level = g.level;
+  const cls = levelClass(level);
+  const label =
+    level === "top" ? "Top" :
+    level === "good" ? "Boa" :
+    level === "mid" ? "Média" : "Fraca";
 
-    // compute score (sem tua odd ainda) para filtrar/ordenar base
-    items = items.map(g => {
-      const s = computeScore(g, state.market, null);
-      return { g, s };
-    });
+  return `<span class="badge ${cls}">${label} • ${Math.round(g.confidence)}%</span>`;
+}
 
-    // filtro minConf / minEdge
-    items = items.filter(({s}) => (s.confidence >= minConf) && (s.edgePct >= minEdge));
+function cardHTML(g) {
+  const metaLeft = `${g.league}${g.country ? " • " + g.country : ""}`;
+  const metaRight =
+    state.mode === "live"
+      ? (g.minute != null && g.minute >= 0 ? `${g.minute}'` : (g.status || "AO VIVO"))
+      : `${g.date || ""} ${g.time || ""}`.trim();
 
-    // sort
-    const sortBy = $("sortBy").value;
-    items.sort((a,b) => {
-      if (sortBy === "confidence") return b.s.confidence - a.s.confidence;
-      if (sortBy === "value") return b.s.edgePct - a.s.edgePct;
-      if (sortBy === "league") return String(a.g.league).localeCompare(String(b.g.league));
-      if (sortBy === "time") return String(a.g.date + " " + a.g.time).localeCompare(String(b.g.date + " " + b.g.time));
-      return 0;
-    });
+  const why = `
+    <div class="modalRow">
+      <b>Confiança:</b> ${Math.round(g.confidence)}%<br/>
+      <b>Value (edge):</b> ${Number(g.edge).toFixed(1)}%<br/><br/>
+      <b>Como calculo agora:</b><br/>
+      • Se a API trouxer confidence/edge → uso esses valores.<br/>
+      • Se não trouxer → confiança fica default 50% e edge 0%.<br/><br/>
+      Próximo passo (quando estiveres com tempo): ligar odds reais por mercado (1X2/OU/BTTS) e estatísticas para um score verdadeiro.
+    </div>
+  `;
 
-    $("countBadge").textContent = String(items.length);
-
-    const empty = $("emptyState");
-    empty.style.display = items.length ? "none" : "block";
-
-    for (const {g, s} of items) {
-      grid.appendChild(gameCard(g, s));
-    }
-  }
-
-  function gameCard(g, baseScore) {
-    const el = document.createElement("div");
-    el.className = "game";
-
-    const favOn = state.favorites.has(String(g.id));
-    const status = String(g.status || "").toLowerCase();
-    const isLive = state.mode === "live" || status.includes("live") || status.includes("playing") || status.includes("inplay");
-    const tagText = isLive ? "AO VIVO" : "PRÓXIMOS";
-
-    // market odds
-    const block = baseScore.marketBlock;
-    const picks = block?.picks || [];
-
-    el.innerHTML = `
-      <div class="gameTop">
+  return `
+    <div class="card" data-id="${g.id}">
+      <div class="cardTop">
         <div>
-          <div class="league">${escapeHtml(g.league)}${g.country ? ` <span class="tiny muted">• ${escapeHtml(g.country)}</span>` : ""}</div>
-          <div class="meta">${escapeHtml(fmtTime(g.date, g.time))}${isLive && Number.isFinite(g.minute) ? ` • ${g.minute}'` : ""}</div>
+          <div class="meta">${metaLeft}</div>
+          <div class="teams">${g.home} <span style="opacity:.7">vs</span> ${g.away}</div>
+          <div class="meta">${metaRight}</div>
         </div>
-        <button class="fav" title="Favorito">${favOn ? "⭐" : "☆"}</button>
+        ${scoreBadge(g)}
       </div>
 
-      <div class="teams">
-        <div><b>${escapeHtml(g.home)}</b> vs <b>${escapeHtml(g.away)}</b></div>
-      </div>
-
-      <div class="scoreLine">
-        <div class="tag ${isLive ? "live" : "upcoming"}">${tagText}${!isLive && status ? ` — ${escapeHtml(status)}` : ""}</div>
-        <div class="grade">
-          <span class="pip ${baseScore.grade}"></span>
-          <span>${baseScore.confidence}%</span>
-          <span class="tiny muted">(${round2(baseScore.edgePct)}% edge)</span>
+      <div class="cardBottom">
+        <div class="kpis">
+          <div class="kpi"><b>Edge</b> ${Number(g.edge).toFixed(1)}%</div>
+          <div class="kpi"><b>Modo</b> ${state.mode === "live" ? "AO VIVO" : "PRÓXIMOS"}</div>
+          <div class="kpi"><b>Mercado</b> ${state.market.toUpperCase()}</div>
         </div>
+        <button class="smallBtn" data-why="1">Porque?</button>
       </div>
 
-      <div class="oddsBox">
-        ${renderOddCell(picks[0])}
-        ${renderOddCell(picks[1])}
-        ${renderOddCell(picks[2])}
-      </div>
+      <template class="whyTpl">${why}</template>
+    </div>
+  `;
+}
 
-      <div class="compare">
-        <input class="bookOdd" type="text" inputmode="decimal" placeholder="Tua odd (ex: 2.05) para comparar value">
-        <button class="btn miniBtn ghost btnRecalc">Recalcular</button>
-      </div>
+function render() {
+  const wrap = $("games");
+  const empty = $("empty");
+  if (!wrap) return;
 
-      <div class="actions">
-        <button class="btn ghost btnWhy">Porquê</button>
-        <button class="btn primary btnDetails">Detalhes</button>
-      </div>
-    `;
+  const filtered = applyFilters(state.games);
+  wrap.innerHTML = filtered.map(cardHTML).join("");
 
-    // handlers
-    el.querySelector(".fav").addEventListener("click", () => {
-      const id = String(g.id);
-      if (state.favorites.has(id)) state.favorites.delete(id);
-      else state.favorites.add(id);
-      saveStorage();
+  if (empty) {
+    empty.classList.toggle("hidden", filtered.length !== 0);
+  }
+}
+
+function openModal(title, sub, html) {
+  const m = $("modal");
+  if (!m) return;
+  $("modalTitle").textContent = title || "Porque?";
+  $("modalSub").textContent = sub || "";
+  $("modalBody").innerHTML = html || "";
+  m.classList.remove("hidden");
+}
+function closeModal() {
+  $("modal")?.classList.add("hidden");
+}
+
+function bindUI() {
+  // Tabs
+  $("tabLive")?.addEventListener("click", () => {
+    state.mode = "live";
+    $("tabLive").classList.add("active");
+    $("tabNext").classList.remove("active");
+    reload();
+  });
+  $("tabNext")?.addEventListener("click", () => {
+    state.mode = "next";
+    $("tabNext").classList.add("active");
+    $("tabLive").classList.remove("active");
+    reload();
+  });
+
+  // Buttons
+  $("btnRefresh")?.addEventListener("click", reload);
+  $("btnHelp")?.addEventListener("click", () => {
+    openModal(
+      "Ajuda",
+      "Como usar",
+      `
+      <div>
+        <b>1)</b> Mete o <b>API Base</b> (workers.dev)<br/>
+        <b>2)</b> Ajusta <b>Min. confiança</b> e <b>Min. edge</b> para veres mais jogos<br/>
+        <b>3)</b> Usa <b>Atualizar</b> ou ativa <b>Auto-refresh</b><br/><br/>
+        Nota: Se não aparecer nada, mete filtros a 0 e testa em <b>PRÓXIMOS</b>.
+      </div>
+      `
+    );
+  });
+
+  // Sliders labels (sem crash)
+  const minEdgeEl = $("minEdge");
+  const minEdgeTextEl = $("minEdgeText");
+  if (minEdgeEl && minEdgeTextEl) {
+    minEdgeTextEl.textContent = `${minEdgeEl.value}%`;
+    minEdgeEl.addEventListener("input", () => {
+      minEdgeTextEl.textContent = `${minEdgeEl.value}%`;
+      storageSet("minEdge", minEdgeEl.value);
       render();
     });
+  }
 
-    const input = el.querySelector(".bookOdd");
-    const recalcBtn = el.querySelector(".btnRecalc");
-    const gradeBox = el.querySelector(".grade");
-
-    function recalcFromInput() {
-      const val = input.value.trim().replace(",", ".");
-      const score = computeScore(g, state.market, val);
-      gradeBox.innerHTML = `
-        <span class="pip ${score.grade}"></span>
-        <span>${score.confidence}%</span>
-        <span class="tiny muted">(${round2(score.edgePct)}% edge)</span>
-      `;
-      // update actions to show correct explanation
-      el.querySelector(".btnWhy").onclick = () => openWhy(g, score, val);
-      el.querySelector(".btnDetails").onclick = () => openDetails(g, score);
-    }
-
-    recalcBtn.addEventListener("click", recalcFromInput);
-    input.addEventListener("keydown", (ev) => {
-      if (ev.key === "Enter") recalcFromInput();
+  const minConfEl = $("minConfidence");
+  const minConfTextEl = $("minConfidenceText");
+  if (minConfEl && minConfTextEl) {
+    minConfTextEl.textContent = `${minConfEl.value}%`;
+    minConfEl.addEventListener("input", () => {
+      minConfTextEl.textContent = `${minConfEl.value}%`;
+      storageSet("minConfidence", minConfEl.value);
+      render();
     });
-
-    // default modal uses baseScore
-    el.querySelector(".btnWhy").addEventListener("click", () => openWhy(g, baseScore, null));
-    el.querySelector(".btnDetails").addEventListener("click", () => openDetails(g, baseScore));
-
-    return el;
   }
 
-  function renderOddCell(pick) {
-    if (!pick) return `<div class="odd"><div class="k">—</div><div class="v">—</div></div>`;
-    const odd = Number.isFinite(pick.odd) ? pick.odd : null;
-    return `
-      <div class="odd">
-        <div class="k">${escapeHtml(pick.label)}</div>
-        <div class="v">${odd ? odd.toFixed(2) : "—"} ${odd ? `<small>(${pick.code})</small>` : ""}</div>
-      </div>
-    `;
-  }
+  // Inputs
+  $("search")?.addEventListener("input", render);
+  $("sortBy")?.addEventListener("change", render);
+  $("days")?.addEventListener("change", reload);
+  $("apiBase")?.addEventListener("change", () => storageSet("apiBase", $("apiBase").value.trim()));
+  $("apiPass")?.addEventListener("change", () => storageSet("apiPass", $("apiPass").value));
+  $("refreshInterval")?.addEventListener("change", setupTimer);
+  $("autoRefresh")?.addEventListener("change", setupTimer);
 
-  // =========================
-  // Modal
-  // =========================
-  function openModal(title, bodyHtml, copyText) {
-    $("modalTitle").textContent = title;
-    $("modalBody").innerHTML = bodyHtml;
-
-    const modal = $("modal");
-    modal.classList.remove("hidden");
-    modal.setAttribute("aria-hidden", "false");
-
-    $("btnCopy").onclick = async () => {
-      try {
-        await navigator.clipboard.writeText(copyText || stripHtml(bodyHtml));
-        setStatus("Copiado ✔", "ok");
-      } catch {
-        setStatus("Não consegui copiar.", "warn");
-      }
-    };
-  }
-
-  function closeModal() {
-    const modal = $("modal");
-    modal.classList.add("hidden");
-    modal.setAttribute("aria-hidden", "true");
-  }
-
-  function openWhy(g, score, userOdd) {
-    const lines = score.reason.map(r => `• ${r}`).join("\n");
-    const title = `Porquê — ${g.home} vs ${g.away}`;
-    const html = `
-      <div class="tiny muted">Explicação do score (confiança + value):</div>
-      <hr/>
-      <pre>${escapeHtml(lines)}</pre>
-      <hr/>
-      <div class="tiny muted">Dica: mete a <b>tua odd</b> no card e carrega <b>Recalcular</b> para ver edge real.</div>
-    `;
-    const copy = `${title}\n\n${lines}\n\nMercado: ${score.marketBlock?.key || "—"}\nTua odd: ${userOdd || "(não indicada)"}`;
-    openModal(title, html, copy);
-  }
-
-  function openDetails(g, score) {
-    const title = `Detalhes — ${g.home} vs ${g.away}`;
-    const rawSmall = {
-      id: g.id,
-      league: g.league,
-      country: g.country,
-      date: g.date,
-      time: g.time,
-      status: g.status,
-      minute: g.minute,
-      odds: g.odds,
-      stadium: g.stadium,
-    };
-    const html = `
-      <div class="tiny muted"><b>Resumo</b></div>
-      <pre>${escapeHtml(JSON.stringify(rawSmall, null, 2))}</pre>
-      <hr/>
-      <div class="tiny muted"><b>Odds (mercado atual: ${escapeHtml(score.marketBlock?.key || "—")})</b></div>
-      <pre>${escapeHtml(JSON.stringify(score.marketBlock, null, 2))}</pre>
-      <hr/>
-      <div class="tiny muted"><b>Raw match (se existir no payload)</b></div>
-      <pre>${escapeHtml(JSON.stringify(g.raw || {}, null, 2))}</pre>
-    `;
-    const copy = `${title}\n\n${JSON.stringify(rawSmall, null, 2)}`;
-    openModal(title, html, copy);
-  }
-
-  // =========================
-  // Múltiplas
-  // =========================
-  function generateParlay() {
-    const size = Number($("parlaySize").value);
-    const profile = $("parlayProfile").value;
-
-    // Base list
-    const items = state.games.map(g => {
-      const sc = computeScore(g, state.market, null);
-      return { g, sc };
+  // Mercado
+  $$(".seg").forEach(btn => {
+    btn.addEventListener("click", () => {
+      $$(".seg").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      state.market = btn.dataset.market || "1x2";
+      storageSet("market", state.market);
+      render();
     });
+  });
 
-    // Perfil
-    let minC = 55, minEdge = 0;
-    if (profile === "safe") { minC = 65; minEdge = -1; }
-    if (profile === "balanced") { minC = 55; minEdge = 0; }
-    if (profile === "aggressive") { minC = 45; minEdge = 2; }
+  // Level chips
+  $$(".chip").forEach(btn => {
+    btn.addEventListener("click", () => {
+      $$(".chip").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      state.level = btn.dataset.level || "all";
+      render();
+    });
+  });
 
-    const picked = items
-      .filter(x => x.sc.confidence >= minC && x.sc.edgePct >= minEdge)
-      .sort((a,b) => (b.sc.confidence + b.sc.edgePct) - (a.sc.confidence + a.sc.edgePct))
-      .slice(0, size);
+  // Modal close
+  $("modalClose")?.addEventListener("click", closeModal);
+  $("modal")?.addEventListener("click", (e) => {
+    if (e.target && e.target.id === "modal") closeModal();
+  });
 
-    const box = $("parlayBox");
-    box.innerHTML = "";
+  // Delegation: Porque?
+  $("games")?.addEventListener("click", (e) => {
+    const btn = e.target?.closest?.("[data-why]");
+    if (!btn) return;
+    const card = e.target.closest(".card");
+    const tpl = card?.querySelector(".whyTpl");
+    const title = card?.querySelector(".teams")?.textContent || "Porque?";
+    openModal(title, "Explicação do score", tpl?.innerHTML || "—");
+  });
+}
 
-    if (!picked.length) {
-      box.innerHTML = `<div class="tiny muted">Não há jogos suficientes com este perfil. Baixa os filtros ou muda o perfil.</div>`;
-      return;
-    }
-
-    let totalOdd = 1;
-    const lines = [];
-
-    for (const {g, sc} of picked) {
-      const pick = sc.pick;
-      const odd = pick?.odd || 1;
-      totalOdd *= odd;
-
-      const line = document.createElement("div");
-      line.className = "parlayLine";
-      line.innerHTML = `
-        <div>
-          <div class="tiny"><b>${escapeHtml(g.home)} vs ${escapeHtml(g.away)}</b></div>
-          <div class="tiny muted">${escapeHtml(g.league)} • ${escapeHtml(sc.marketBlock?.key || "—")} • ${escapeHtml(pick?.label || "—")}</div>
-        </div>
-        <div class="tiny"><b>${odd ? odd.toFixed(2) : "—"}</b></div>
-      `;
-      box.appendChild(line);
-
-      lines.push(`${g.home} vs ${g.away} | ${sc.marketBlock?.key || "—"} | ${pick?.label || "—"} | odd ${odd ? odd.toFixed(2) : "—"}`);
-    }
-
-    const total = document.createElement("div");
-    total.className = "parlayTotal";
-    total.innerHTML = `
-      <div>Total (aprox.)</div>
-      <div>${Number.isFinite(totalOdd) ? totalOdd.toFixed(2) : "—"}</div>
-    `;
-    box.appendChild(total);
-
-    state.lastParlay = { totalOdd: Number.isFinite(totalOdd) ? totalOdd : null, lines };
+function setupTimer() {
+  if (state.timer) {
+    clearInterval(state.timer);
+    state.timer = null;
   }
+  const enabled = $("autoRefresh")?.checked;
+  const sec = Number($("refreshInterval")?.value || 20);
+  if (enabled) {
+    state.timer = setInterval(reload, sec * 1000);
+  }
+}
 
-  // =========================
-  // Mercado chips
-  // =========================
-  function setMarket(m) {
-    state.market = m;
-    for (const c of document.querySelectorAll("#marketChips .chip")) {
-      c.classList.toggle("active", c.dataset.market === m);
-    }
-    $("marketText").textContent =
-      m === "match_winner" ? "1X2" :
-      m === "over_under_25" ? "Over/Under 2.5" :
-      m === "btts" ? "BTTS" : "—";
-    saveStorage();
+async function reload() {
+  try {
+    const games = await fetchGames();
+    state.games = games;
+    render();
+  } catch (err) {
+    console.error(err);
+    setStatus("Erro: " + (err?.message || "Failed"));
+    state.games = [];
     render();
   }
-
-  // =========================
-  // Auto refresh
-  // =========================
-  function setupAutoRefresh() {
-    clearInterval(state.timer);
-    const enabled = $("autoRefresh").checked;
-    $("autoText").textContent = enabled ? "Ligado" : "Desligado";
-    if (!enabled) return;
-
-    const sec = Number($("refreshEvery").value);
-    state.timer = setInterval(() => {
-      loadGames();
-    }, Math.max(5, sec) * 1000);
-  }
-
-  // =========================
-  // Utils
-  // =========================
-  function escapeHtml(s) {
-    return String(s ?? "")
-      .replaceAll("&","&amp;")
-      .replaceAll("<","&lt;")
-      .replaceAll(">","&gt;")
-      .replaceAll('"',"&quot;")
-      .replaceAll("'","&#039;");
-  }
-  function stripHtml(html) {
-    const div = document.createElement("div");
-    div.innerHTML = html;
-    return div.textContent || div.innerText || "";
-  }
-
-  // =========================
-  // Init / Events
-  // =========================
-  function setMode(mode) {
-    state.mode = mode;
-    $("modeText").textContent = mode === "live" ? "AO VIVO" : "PRÓXIMOS";
-    $("tabLive").classList.toggle("active", mode === "live");
-    $("tabUpcoming").classList.toggle("active", mode === "upcoming");
-    saveStorage();
-    loadGames();
-  }
-
-  function init() {
-    loadStorage();
-
-    // sliders text
-     const minConfidenceEl = document.getElementById("minConfidence") || document.getElementById("minConf");
-const minEdgeEl = document.getElementById("minEdge") || document.getElementById("minValue") || document.getElementById("edge");
-
-if (!minConfidenceEl || !minEdgeEl) {
-  throw new Error("Faltam inputs minConfidence/minEdge no HTML (IDs não encontrados).");
 }
 
-minConfidenceElText.textContent = `${minConfidenceEl.value}%`;
-minEdgeElText.textContent = `${minEdgeEl.value}%`;
-     // Labels dos sliders (não rebenta se algum elemento não existir)
+function boot() {
+  // restore settings
+  const base = storageGet("apiBase", "https://apostas-live-api.manelronaldo1.workers.dev");
+  const pass = storageGet("apiPass", "");
+  const minC = storageGet("minConfidence", "35");
+  const minE = storageGet("minEdge", "0");
+  const market = storageGet("market", "1x2");
+
+  if ($("apiBase")) $("apiBase").value = base;
+  if ($("apiPass")) $("apiPass").value = pass;
+  if ($("minConfidence")) $("minConfidence").value = minC;
+  if ($("minEdge")) $("minEdge").value = minE;
+
+  // set market active
+  state.market = market;
+  $$(".seg").forEach(b => b.classList.toggle("active", (b.dataset.market || "1x2") === market));
+
+  bindUI();
+  setupTimer();
+  reload();
 }
 
-function updateSlidersText() {
-  if (minConfidenceTextEl && minConfidenceEl) {
-    minConfidenceTextEl.textContent = `${minConfidenceEl.value}%`;
-  }
-  if (minEdgeTextEl && minEdgeEl) {
-    minEdgeTextEl.textContent = `${minEdgeEl.value}%`;
-  }
-}
-
-if (minConfidenceEl) {
-  minConfidenceEl.addEventListener("input", () => {
-    updateSlidersText();
-    saveToStorage?.();
-    render?.();
-  });
-}
-
-if (minEdgeEl) {
-  minEdgeEl.addEventListener("input", () => {
-    updateSlidersText();
-    saveToStorage?.();
-    render?.();
-  });
-}
-
-updateSlidersText();
-
-      saveStorage();
-      render();
-    });
-    $("minEdge").addEventListener("input", () => {
-      $("minEdgeText").textContent = `${$("minEdge").value}%`;
-      saveStorage();
-      render();
-    });
-
-    $("search").addEventListener("input", render);
-    $("sortBy").addEventListener("change", render);
-
-    $("btnRefresh").addEventListener("click", loadGames);
-
-    $("tabLive").addEventListener("click", () => setMode("live"));
-    $("tabUpcoming").addEventListener("click", () => setMode("upcoming"));
-
-    $("btnOnlyFav").addEventListener("click", () => {
-      state.onlyFav = !state.onlyFav;
-      $("btnOnlyFav").textContent = state.onlyFav ? "⭐ A mostrar favoritos" : "⭐ Só favoritos";
-      render();
-      saveStorage();
-    });
-
-    for (const chip of document.querySelectorAll("#marketChips .chip")) {
-      chip.addEventListener("click", () => setMarket(chip.dataset.market));
-    }
-
-    $("btnGenerateParlay").addEventListener("click", generateParlay);
-
-    $("apiBase").addEventListener("change", () => { saveStorage(); loadGames(); });
-    $("apiPassword").addEventListener("change", () => { saveStorage(); loadGames(); });
-
-    $("autoRefresh").addEventListener("change", () => { saveStorage(); setupAutoRefresh(); });
-    $("refreshEvery").addEventListener("change", () => { saveStorage(); setupAutoRefresh(); });
-
-    // Modal
-    $("modalClose").addEventListener("click", closeModal);
-    $("modalX").addEventListener("click", closeModal);
-    $("modalOk").addEventListener("click", closeModal);
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") closeModal();
-    });
-
-    // Defaults
-    setupAutoRefresh();
-    setMode("live");
-  }
-
-  init();
+document.addEventListener("DOMContentLoaded", boot);
